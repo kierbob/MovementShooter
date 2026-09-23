@@ -7,8 +7,6 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Bebas+Neue&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="src/menu.css" />
-  <link rel="stylesheet" href="src/hud.css" />
   <style>
     html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1117; }
     canvas { display: block; }
@@ -23,19 +21,32 @@
     #debug.compact { min-width: 0; padding: 3px 8px; font-size: 11px; opacity: 0.8; }
     body[data-state="menu"] #debug { display: none; }
   </style>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
-      }
-    }
+  <script>
+    // Cache-busting: browsers (Opera especially) keep old copies of the game's scripts for a
+    // while, so a normal refresh can run an outdated game. Every page load asks for fresh copies.
+    // When you add a new file in src/, add it to this list.
+    (function () {
+      const v = Date.now().toString(36);
+      const files = ['bots', 'combat', 'config', 'debug', 'fx', 'hud', 'input', 'items', 'main', 'menu',
+        'models', 'net', 'outline', 'particles', 'player', 'render', 'settings', 'sound', 'trial',
+        'trialview', 'world'];
+      const imports = {
+        three: 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js',
+        'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/',
+      };
+      for (const f of files) imports[`./src/${f}.js`] = `./src/${f}.js?v=${v}`;
+      document.write(
+        `<link rel="stylesheet" href="src/menu.css?v=${v}" />` +
+        `<link rel="stylesheet" href="src/hud.css?v=${v}" />` +
+        `<script type="importmap">${JSON.stringify({ imports })}<\/script>`);
+      window.__BUILD = v;
+    })();
   </script>
 </head>
 <body data-state="menu">
   <div id="debug"></div>
   <div id="hud"></div>
   <div id="menu"></div>
-  <script type="module" src="src/main.js"></script>
+  <script type="module">import './src/main.js';</script>
 </body>
 </html>
