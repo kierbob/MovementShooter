@@ -17,6 +17,7 @@ const TEMPLATE = `
 <div class="arena-score" data-arena><span data-arena-k>0</span><small> KILLS</small><b>·</b><span data-arena-d>0</span><small> DEATHS</small></div>
 <div class="killfeed" data-feed></div>
 <div class="online-status" data-online></div>
+<div class="scoreboard" data-scoreboard></div>
 <div class="death" data-death><div class="death-word">SPLATTED!</div><div class="death-sub" data-death-sub></div></div>
 <div class="ability" data-ability>
   <div class="ability-icon"><div class="ability-cd" data-ability-cd></div><span data-ability-key></span></div>
@@ -216,6 +217,24 @@ export class HUD {
     }
     this.el.death.classList.toggle('show', player.dead);
     if (player.dead) this.el.deathSub.textContent = `Respawning in ${Math.max(0, respawnIn).toFixed(1)}`;
+  }
+
+  // Hold-to-show scoreboard. rows: [{ name, k, d, you, color }]
+  updateScoreboard(show, rows) {
+    const el = this.root.querySelector('[data-scoreboard]');
+    el.classList.toggle('show', show);
+    if (!show) { this.scoreKey = ''; return; }
+    const sorted = [...rows].sort((a, b) => b.k - a.k || a.d - b.d);
+    const key = JSON.stringify(sorted);
+    if (key === this.scoreKey) return; // only touch the DOM when something changed
+    this.scoreKey = key;
+    const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+    el.innerHTML = `<div class="sb-title">SCOREBOARD</div>
+      <div class="sb-row sb-head"><span>#</span><span>Player</span><span>K</span><span>D</span></div>
+      ${sorted.map((r, i) => `<div class="sb-row${r.you ? ' you' : ''}">
+        <span>${i + 1}</span>
+        <span><i style="background:#${(r.color ?? 0xffffff).toString(16).padStart(6, '0')}"></i>${esc(r.name)}${r.you ? ' (you)' : ''}</span>
+        <span>${r.k}</span><span>${r.d}</span></div>`).join('')}`;
   }
 
   updateOnline(players, ping) {

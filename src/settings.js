@@ -17,6 +17,7 @@ export const ACTIONS = [
   { id: 'ability', label: 'Ability', def: 'KeyQ' },
   { id: 'menu', label: 'Open Menu', def: 'KeyL' },
   { id: 'respawn', label: 'Respawn', def: 'KeyK' },
+  { id: 'scoreboard', label: 'Scoreboard (hold)', def: 'Tab' },
   { id: 'stats', label: 'Stats Panel', def: 'F4' },
 ];
 

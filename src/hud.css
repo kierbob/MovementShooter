@@ -88,6 +88,20 @@ body[data-guns="off"] .ability { display: none; }
 }
 body[data-mode="online"] .online-status { display: block; }
 
+/* ---------- scoreboard (hold Tab) ---------- */
+.scoreboard {
+  position: fixed; left: 50%; top: 18%; transform: translateX(-50%); width: min(460px, calc(100vw - 32px));
+  display: none; background: rgba(12, 18, 52, 0.9); border: 2px solid rgba(255,255,255,0.15); border-radius: 12px;
+  padding: 14px 16px; font-family: system-ui, sans-serif;
+}
+.scoreboard.show { display: block; }
+.sb-title { font-family: 'Bangers', 'Bebas Neue', sans-serif; font-size: 34px; letter-spacing: 2px; color: #ffe14d; text-align: center; margin-bottom: 8px; }
+.sb-row { display: grid; grid-template-columns: 28px 1fr 48px 48px; gap: 8px; align-items: center; padding: 6px 8px; border-radius: 6px; font-size: 15px; font-weight: 600; }
+.sb-row span:nth-child(3), .sb-row span:nth-child(4) { text-align: center; font-variant-numeric: tabular-nums; }
+.sb-row i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; border: 1px solid #15151f; }
+.sb-head { font-size: 11px; color: #9aa6d6; text-transform: uppercase; letter-spacing: 1px; }
+.sb-row.you { background: rgba(255, 225, 53, 0.16); outline: 1px solid rgba(255, 225, 53, 0.5); }
+
 /* ---------- bot arena ---------- */
 .health, .arena-score, .killfeed { display: none; }
 body[data-mode="arena"] .health,

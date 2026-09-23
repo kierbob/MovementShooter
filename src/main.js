@@ -588,6 +588,11 @@ function frame(now) {
       hud.updatePlayer(dt, player, input.yaw, arena.respawnT);
       hud.updateArena(arena);
     }
+    // Hold Tab: scoreboard (online: everyone from the server; Bot Arena: just your score).
+    const showBoard = state === 'playing' && input.isDown('scoreboard') && (online.active || arena.active);
+    hud.updateScoreboard(showBoard, !showBoard ? [] : online.active
+      ? (net.players ?? []).map((p) => ({ name: p.name, k: p.k, d: p.d, color: p.color, you: p.id === net.id }))
+      : [{ name: settings.playerName || 'You', k: arena.kills, d: arena.deaths, color: 0xffe14d, you: true }]);
     if (online.active) {
       hud.updateOnline(net.remotes.size + 1, net.ping);
       hud.updatePlayer(dt, player, input.yaw, net.me?.respawnIn ?? 0);

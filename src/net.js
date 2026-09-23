@@ -150,6 +150,7 @@ export class Net {
     if (msg.me) { this.me = msg.me; this.meFresh = true; }
     if (msg.ev?.length) this.events.push(...msg.ev);
     this.proj = msg.proj ?? [];
+    this.players = msg.players; // for the scoreboard
     const seen = new Set();
     for (const s of msg.players) {
       if (s.id === this.id) { this.self = s; continue; }
