@@ -781,6 +781,22 @@ refreshKinds();
 setTool('select');
 changed();
 requestAnimationFrame(loop);
+// editor.html?map=bean-street opens a built-in map from maps/ (Ctrl+Z goes back to yours).
+const builtIn = new URLSearchParams(location.search).get('map');
+if (builtIn && /^[a-z0-9-]+$/.test(builtIn)) {
+  fetch(`maps/${builtIn}.json`, { cache: 'no-store' })
+    .then((r) => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then((data) => {
+      checkpoint();
+      map = withIds(data);
+      selection = [];
+      nameInput.value = map.name;
+      changed();
+      toast(`Opened ${map.name} · Ctrl+Z to get your old map back`);
+      history.replaceState(null, '', location.pathname); // a refresh keeps your edits instead of reloading it
+    })
+    .catch(() => toast(`Couldn't find the map "${builtIn}"`));
+}
 if (!localStorage.getItem(SAVE_KEY + '.seenHelp')) {
   commands.help();
   try { localStorage.setItem(SAVE_KEY + '.seenHelp', '1'); } catch { /* ignore */ }

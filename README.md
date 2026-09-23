@@ -50,6 +50,9 @@ Open `editor.html` (on the live site: https://kierbob.github.io/MovementShooter/
 Build with boxes, jump pads and spawns, press **Test Play** to run around the map in the game, and
 **Export** to download it as a `.json` file. Press **Help** in the editor for controls.
 
+Built-in maps live in `maps/` and open with `editor.html?map=<name>`, e.g.
+`editor.html?map=bean-street` (two houses across a street, made by `tools/gen_bean_street.py`).
+
 ## Modes
 
 - **Dev Server**: movement sandbox with bean dummies, jump pads, and **time trial** portals
