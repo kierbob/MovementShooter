@@ -35,8 +35,8 @@ function defaults() {
     lighting: 'pastel',   // key of LIGHTING in render.js
     quality: 'balanced',  // key of QUALITY in render.js
     statsPanel: 'compact', // 'full' | 'compact' | 'off' (toggle in game with F4)
-    rawInput: false,       // raw mouse (skips Windows acceleration). Off by default: on some
-                           // multi-monitor Windows setups the browser lets the cursor escape with it.
+    rawMouse: true,        // raw mouse input (skips Windows acceleration, no Chrome camera snaps).
+                           // Turn off if the cursor escapes to another monitor on a multi-monitor PC.
     mode: 'dev',          // 'dev' | 'arena' | 'online'
     playerName: '',
     serverUrl: 'localhost:8080',
@@ -61,7 +61,7 @@ function load() {
     if (typeof saved?.lighting === 'string') s.lighting = saved.lighting;
     if (['high', 'balanced', 'performance'].includes(saved?.quality)) s.quality = saved.quality;
     if (['full', 'compact', 'off'].includes(saved?.statsPanel)) s.statsPanel = saved.statsPanel;
-    if (typeof saved?.rawInput === 'boolean') s.rawInput = saved.rawInput;
+    if (typeof saved?.rawMouse === 'boolean') s.rawMouse = saved.rawMouse;
     if (['easy', 'normal', 'hard'].includes(saved?.difficulty)) s.difficulty = saved.difficulty;
     const lo = saved?.loadout;
     if (WEAPONS[lo?.primary]?.slot === 'primary') s.loadout.primary = lo.primary;

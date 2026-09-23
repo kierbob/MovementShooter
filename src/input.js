@@ -70,7 +70,7 @@ export class Input {
         this.keyboardLocked = true;
       } catch { /* unsupported */ }
     }
-    if (settings.rawInput) {
+    if (settings.rawMouse) {
       try {
         await this.canvas.requestPointerLock({ unadjustedMovement: true });
         this.rawMouse = true;
@@ -124,6 +124,14 @@ export class Input {
 
   onMouse(e) {
     if (!this.locked || !this.enabled) return;
+    // Without raw input, Chrome on Windows sometimes reports one bogus, huge movement (the camera
+    // "snaps"). Drop any single event far bigger than the recent ones.
+    const mag = Math.abs(e.movementX) + Math.abs(e.movementY);
+    if (!this.rawMouse) {
+      const typical = this.typicalMove ?? 20;
+      if (mag > 300 && mag > typical * 10) return;
+      this.typicalMove = typical * 0.9 + mag * 0.1;
+    }
     const sens = radiansPerCount();
     this.yaw -= e.movementX * sens;
     this.pitch -= e.movementY * sens;
