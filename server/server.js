@@ -68,6 +68,9 @@ wss.on('error', (err) => {
 
 wss.on('connection', (ws, req) => {
   let client = null;
+  // A dropped connection (tab killed, Wi-Fi blip) can raise a socket error; handle it so it
+  // can never take the whole server down. 'close' still fires afterwards and cleans up.
+  ws.on('error', (err) => console.warn(`socket error (${client?.name ?? 'unknown'}): ${err.code ?? err.message}`));
 
   ws.on('message', (data) => {
     let msg;

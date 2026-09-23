@@ -6,12 +6,18 @@
 const INTERP_DELAY = 100; // ms other players are shown in the past (must exceed the snapshot gap)
 
 // Accept "localhost:8080", "ws://…", "wss://…", "http(s)://…" (e.g. a Cloudflare tunnel URL).
+// Without a scheme: your own PC (localhost) is always plain ws:// — the local server has no
+// certificate, and browsers allow ws://localhost even from an https page (e.g. GitHub Pages).
+// Anything else gets wss:// on an https page (browsers block plain ws:// there).
 export function normalizeServerUrl(raw) {
   let u = String(raw ?? '').trim();
   if (!u) return '';
   if (u.startsWith('https://')) u = 'wss://' + u.slice(8);
   else if (u.startsWith('http://')) u = 'ws://' + u.slice(7);
-  else if (!/^wss?:\/\//.test(u)) u = (location.protocol === 'https:' ? 'wss://' : 'ws://') + u;
+  else if (!/^wss?:\/\//.test(u)) {
+    const isLocal = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(u);
+    u = (isLocal || location.protocol !== 'https:' ? 'ws://' : 'wss://') + u;
+  }
   return u.replace(/\/+$/, '');
 }
 
