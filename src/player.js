@@ -417,8 +417,13 @@ export function stepPlayer(p, cmd, boxes, dt) {
       const wishSpeed = p.crouching ? PLAYER.crouchSpeed : sprinting ? MOVE.sprintSpeed : MOVE.walkSpeed;
       const speed = horizontalSpeed(p);
       const along = len > 0 && speed > 0.01 ? (p.vel.x * wishDir.x + p.vel.z * wishDir.z) / speed : -1;
-      if (p.frictionGrace > 0 || p.landGrace > 0) {
-        // just landed / just got knocked back: keep everything for a moment
+      if (p.frictionGrace > 0) {
+        // just got knocked back: keep everything for a moment
+      } else if (p.crouching && speed > wishSpeed) {
+        // Crouching kills momentum fast: going fast low to the ground is what sliding is for.
+        setHorizontalSpeed(p, Math.max(wishSpeed, speed - PLAYER.crouchBrake * dt));
+      } else if (p.landGrace > 0) {
+        // just landed: keep everything for a moment (jump chains stay fast)
       } else if (speed > wishSpeed && along > 0.7) {
         // Carrying extra speed and still pushing that way: let it fade slowly (momentum!)
         setHorizontalSpeed(p, Math.max(wishSpeed, speed - MOVE.overspeedDecay * dt));

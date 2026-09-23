@@ -9,6 +9,7 @@ export const PLAYER = {
   crouchHeight: 1.0,
   crouchEyeHeight: 0.8,
   crouchSpeed: 4.5,
+  crouchBrake: 60,  // m/s lost per second when crouching above crouch speed (no crouch-"sliding")
   stepHeight: 0.45, // ledges this low are walked up automatically
 };
 
