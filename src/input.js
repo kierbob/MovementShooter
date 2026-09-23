@@ -70,11 +70,13 @@ export class Input {
         this.keyboardLocked = true;
       } catch { /* unsupported */ }
     }
-    try {
-      await this.canvas.requestPointerLock({ unadjustedMovement: true });
-      this.rawMouse = true;
-      return true;
-    } catch { /* raw input unsupported, or lock refused */ }
+    if (settings.rawInput) {
+      try {
+        await this.canvas.requestPointerLock({ unadjustedMovement: true });
+        this.rawMouse = true;
+        return true;
+      } catch { /* raw input unsupported, or lock refused */ }
+    }
     try {
       await this.canvas.requestPointerLock();
       this.rawMouse = false;

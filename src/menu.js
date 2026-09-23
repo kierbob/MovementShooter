@@ -94,6 +94,8 @@ const TEMPLATE = `
         </div>
         <div class="set-note" data-sens-info></div>
         <div class="set-note">Same scale as CS2 / Apex, so use your usual sens.</div>
+        <label class="set-toggle"><input type="checkbox" data-raw-input><span>Raw input</span></label>
+        <div class="set-note">Skips Windows mouse acceleration. Leave it off if your cursor slips onto another monitor while playing (a browser bug on some multi-monitor PCs). Takes effect next time you click in.</div>
       </section>
       <section class="set-sec" data-sec="audio">
         <div class="kicker">Sound</div><h2>Audio</h2>
@@ -253,6 +255,12 @@ export class Menu {
     };
     this.sensRange.addEventListener('input', () => setSens(parseFloat(this.sensRange.value)));
     this.sensNum.addEventListener('change', () => setSens(parseFloat(this.sensNum.value)));
+
+    this.rawInput = root.querySelector('[data-raw-input]');
+    this.rawInput.addEventListener('change', () => {
+      settings.rawInput = this.rawInput.checked;
+      saveSettings();
+    });
 
     this.volRange = root.querySelector('#vol-range');
     this.volRange.addEventListener('input', () => {
@@ -545,6 +553,7 @@ export class Menu {
   }
 
   refreshSens() {
+    this.rawInput.checked = settings.rawInput;
     this.sensRange.value = settings.sensitivity;
     this.sensRange.style.setProperty('--fill', `${Math.min(100, ((settings.sensitivity - 0.1) / 9.9) * 100)}%`);
     this.sensNum.value = settings.sensitivity.toFixed(2);
