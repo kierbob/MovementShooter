@@ -104,6 +104,7 @@ export class Input {
 
   onButton(e, down) {
     if (!this.locked) return;
+    this.clickT = performance.now(); // Chrome can report a bogus jump on the next mouse move
     const code = 'Mouse' + e.button;
     if (down && code === settings.keys.menu) { document.exitPointerLock(); return; }
     this.handle(code, down, e.type, e.timeStamp);
@@ -134,7 +135,11 @@ export class Input {
     };
     // Chrome's bogus jump is a single event: never drop two in a row, so a real, sudden change of
     // direction can't get stuck being ignored.
-    const spike = !f.dropped && (axis(dx, f.x, f.ax) || axis(dy, f.y, f.ay));
+    // Right after a click (= every shot), be stricter: that first move is where Chrome's jump lands.
+    const afterClick = this.clickT != null && now - this.clickT < 60;
+    this.clickT = null;
+    const clickJump = afterClick && Math.abs(dx) + Math.abs(dy) > Math.max(25, (f.ax + f.ay) * 3);
+    const spike = !f.dropped && (clickJump || axis(dx, f.x, f.ax) || axis(dy, f.y, f.ay));
     f.dropped = spike;
     if (!spike) {
       f.x = f.x * 0.7 + dx * 0.3; f.y = f.y * 0.7 + dy * 0.3;           // recent direction
