@@ -12,7 +12,7 @@ import { settings, saveSettings } from './settings.js';
 import { Sound } from './sound.js';
 import { TimeTrial } from './trial.js';
 import { Bots } from './bots.js';
-import { Net } from './net.js';
+import { Net, normalizeServerUrl } from './net.js';
 import { ARENA } from './world.js';
 import { TrialView } from './trialview.js';
 
@@ -185,7 +185,15 @@ async function startOnline() {
   } catch (err) {
     stopOnline();
     quitToMenu();
-    menu.setHint(`${err.message}. Is the server running? (start-server.bat)`);
+    const url = normalizeServerUrl(settings.serverUrl);
+    const localFromPublicSite = location.protocol === 'https:' && /^ws:\/\/(localhost|127\.0\.0\.1|\[::1\])/i.test(url);
+    menu.setHint(localFromPublicSite
+      // Chrome's "Local network access" protection blocks public sites from reaching your own PC
+      // unless you allow it for the site.
+      ? `Couldn't reach your local server. If start-server.bat is running, your browser is blocking it: `
+        + `click the icon left of the address bar → Site settings → Local network access → Allow, then reload. `
+        + `(Or play from start.bat at http://localhost:5173.)`
+      : `${err.message}. Is the server running? (start-server.bat)`);
   }
 }
 
