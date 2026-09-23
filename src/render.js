@@ -10,7 +10,7 @@ export const QUALITY = {
 };
 
 // Bold cartoon palette.
-const COLORS = {
+export const COLORS = {
   floor: 0x56648a,
   wall: 0x8fa3cc,
   block: 0xa77be0,
@@ -25,7 +25,7 @@ const COLORS = {
 };
 
 // A 4x4 grid texture; one cell = 1 m so distances and heights are readable.
-function gridTexture() {
+export function gridTexture() {
   const size = 256;
   const c = document.createElement('canvas');
   c.width = c.height = size;
@@ -50,7 +50,7 @@ function gridTexture() {
 }
 
 // BoxGeometry with UVs scaled to world size so the grid is 1 m everywhere.
-function boxGeometry(w, h, d) {
+export function boxGeometry(w, h, d) {
   const geo = new THREE.BoxGeometry(w, h, d);
   const uv = geo.attributes.uv;
   const faceSize = [[d, h], [d, h], [w, d], [w, d], [w, h], [w, h]]; // +x -x +y -y +z -z

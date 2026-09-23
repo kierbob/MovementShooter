@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Map Editor · Movement Shooter</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet" />
+  <script>
+    // Same cache-busting as index.html: always load fresh copies of the scripts.
+    (function () {
+      const v = Date.now().toString(36);
+      const files = ['editor', 'render', 'particles', 'config'];
+      const imports = {
+        three: 'https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js',
+        'three/addons/': 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/',
+      };
+      for (const f of files) imports[`./src/${f}.js`] = `./src/${f}.js?v=${v}`;
+      document.write(
+        `<link rel="stylesheet" href="src/editor.css?v=${v}" />` +
+        `<script type="importmap">${JSON.stringify({ imports })}<\/script>`);
+    })();
+  </script>
+</head>
+<body>
+  <header class="ed-top">
+    <div class="logo">MAP <span>EDITOR</span></div>
+    <input class="map-name" data-map-name maxlength="32" spellcheck="false" placeholder="Map name">
+    <div class="top-btns">
+      <button type="button" data-cmd="new">New</button>
+      <button type="button" data-cmd="import">Import</button>
+      <button type="button" data-cmd="export" class="hot">Export</button>
+      <button type="button" data-cmd="copy">Copy JSON</button>
+      <button type="button" data-cmd="play" class="play">Test Play</button>
+      <button type="button" data-cmd="help">Help</button>
+    </div>
+    <input type="file" accept=".json,application/json" data-file hidden>
+  </header>
+
+  <aside class="ed-tools">
+    <div class="tool-head">Tools</div>
+    <button type="button" class="tool" data-tool="select"><span>Select</span><kbd>V</kbd></button>
+    <button type="button" class="tool" data-tool="box"><span>Box</span><kbd>B</kbd></button>
+    <button type="button" class="tool" data-tool="pad"><span>Jump Pad</span><kbd>P</kbd></button>
+    <button type="button" class="tool" data-tool="spawn"><span>Spawn</span><kbd>N</kbd></button>
+    <div class="tool-head">New box</div>
+    <div class="kinds" data-kinds></div>
+    <div class="size-row">
+      <label>W<input type="number" step="0.5" min="0.5" data-new="w"></label>
+      <label>D<input type="number" step="0.5" min="0.5" data-new="d"></label>
+      <label>H<input type="number" step="0.5" min="0.1" data-new="h"></label>
+    </div>
+    <div class="stats" data-stats></div>
+  </aside>
+
+  <aside class="ed-props" data-props></aside>
+
+  <div class="ed-status" data-status></div>
+  <div class="ed-toast" data-toast></div>
+
+  <div class="ed-help hidden" data-help>
+    <div class="help-box">
+      <h2>How to use</h2>
+      <div class="help-cols">
+        <div>
+          <h3>Camera</h3>
+          <p><b>Right-drag</b> orbit · <b>Middle-drag</b> or <b>WASD</b> pan · <b>Wheel</b> zoom · <b>F</b> focus selection</p>
+          <h3>Building</h3>
+          <p><b>Box</b>: click the floor or a box top to place (click a box side to stack against it). <b>Jump Pad</b> / <b>Spawn</b>: click where they go.</p>
+          <p>Everything snaps to a 0.5 m grid. Hold <b>Alt</b> to place without snapping.</p>
+        </div>
+        <div>
+          <h3>Editing</h3>
+          <p><b>Click</b> select · <b>Drag</b> move · <b>Shift+click</b> add to selection<br>
+          <b>Arrows</b> move (Shift = 2 m) · <b>PgUp/PgDn</b> raise/lower<br>
+          <b>R</b> rotate 90° · <b>Ctrl+D</b> duplicate · <b>Del</b> delete<br>
+          <b>Ctrl+Z / Ctrl+Y</b> undo/redo · <b>Esc</b> deselect</p>
+          <h3>Sizes to know</h3>
+          <p>Player is 1.8 m tall · steps up to 0.45 m automatically · jumps about 1.1 m · jump pads throw you about 6.5 m up · slide under anything with 1.2 m+ clearance</p>
+        </div>
+      </div>
+      <p class="help-foot">Your work autosaves in this browser. <b>Export</b> downloads a .json file to send over. <b>Test Play</b> opens the game on this map.</p>
+      <button type="button" data-cmd="help">Got it</button>
+    </div>
+  </div>
+
+  <script type="module">import './src/editor.js';</script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 import { TICK_DT, PLAYER, MOVE } from './config.js';
-import { BOXES, SPAWN, TARGETS } from './world.js';
+import { BOXES, SPAWN, TARGETS, loadCustomMap } from './world.js';
 import { createPlayer, stepPlayer, respawn, horizontalSpeed, restoreState, applyImpulse } from './player.js';
 import { Input } from './input.js';
 import { createRenderer, LIGHTING } from './render.js';
@@ -43,6 +43,20 @@ function playMovementSounds(sound, player) {
     } else if (e.name === 'slide' || e.name === 'land slide') sound.play('slide');
     else if (e.name === 'jump pad') sound.play('pad');
   }
+}
+
+// ?testmap = play the map from the map editor (editor.html) instead of the dev map.
+const testMap = (() => {
+  if (!new URLSearchParams(location.search).has('testmap')) return null;
+  try { return JSON.parse(localStorage.getItem('movement-shooter.testmap')); } catch { return null; }
+})();
+if (testMap) {
+  loadCustomMap(testMap);
+  settings.mode = 'dev'; // test maps are solo
+  const tag = document.createElement('div');
+  tag.className = 'testmap-tag';
+  tag.textContent = `TEST MAP · ${testMap.name || 'Untitled'}`;
+  document.body.append(tag);
 }
 
 const { renderer, scene, camera, sun, applyLighting, lighting, updateSky, applyQuality } = createRenderer(BOXES);

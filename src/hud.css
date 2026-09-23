@@ -207,3 +207,10 @@ body[data-mode="online"] .killfeed { display: block; }
   .ability { right: auto; left: 16px; }
   .weapon-panel { right: 16px; }
 }
+
+/* Playing a map from the map editor */
+.testmap-tag {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%) skewX(-8deg); z-index: 40;
+  padding: 2px 14px; font: 20px 'Bebas Neue', sans-serif; letter-spacing: 2px;
+  background: #ffe135; color: #15151a; pointer-events: none;
+}

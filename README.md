@@ -44,6 +44,12 @@ Current state: free-for-all with real combat. The server runs the same movement 
 as the game (authoritative), with lag-compensated hits, client prediction + reconciliation, health,
 deaths, respawns, a kill feed and a Tab scoreboard. Next: match flow (score limit, timer).
 
+## Map editor
+
+Open `editor.html` (on the live site: https://kierbob.github.io/MovementShooter/editor.html).
+Build with boxes, jump pads and spawns, press **Test Play** to run around the map in the game, and
+**Export** to download it as a `.json` file. Press **Help** in the editor for controls.
+
 ## Modes
 
 - **Dev Server**: movement sandbox with bean dummies, jump pads, and **time trial** portals

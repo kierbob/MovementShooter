@@ -206,6 +206,26 @@ export const TARGETS = [
   { x: -20, y: 0, z: -15, move: { axis: 'x', amp: 5, speed: 0.9 } },
 ];
 
+// Custom maps from the map editor (editor.html). Replaces the dev map's contents in place, so it
+// must run before anything builds from BOXES / PADS (see main.js). Format:
+//   { name, boxes: [{ x, z, w, d, h, y, kind }], pads: [{ x, y, z, radius, launch?, forward?, dir? }],
+//     spawns: [{ x, y, z, yaw }] }
+export function loadCustomMap(m) {
+  BOXES.length = 0;
+  for (const b of m.boxes ?? []) BOXES.push(box(b.x, b.z, b.w, b.d, b.h, b.y ?? 0, b.kind ?? 'block'));
+  PADS.length = 0;
+  for (const p of m.pads ?? []) {
+    const pad = { x: p.x, y: p.y ?? 0, z: p.z, radius: p.radius ?? 1.2 };
+    if (p.launch != null) pad.launch = p.launch;
+    if (p.dir) { pad.dir = { x: p.dir.x, z: p.dir.z }; pad.forward = p.forward ?? 18; }
+    PADS.push(pad);
+  }
+  const s = m.spawns?.[0];
+  if (s) Object.assign(SPAWN, { x: s.x, y: s.y ?? 0, z: s.z, yaw: s.yaw ?? 0 });
+  PORTALS.length = 0;
+  TARGETS.length = 0;
+}
+
 export function overlaps(a, b) {
   const e = 1e-6;
   return (
