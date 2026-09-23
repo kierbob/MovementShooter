@@ -1,7 +1,8 @@
 import {
   ACTIONS, settings, bindKey, resetSettings, saveSettings, setLoadout, keyLabel, cmPer360,
 } from './settings.js';
-import { WEAPONS, ABILITIES, weaponsForSlot, weaponStats, abilityStats } from './items.js';
+import { WEAPONS, ABILITIES, weaponsForSlot, weaponStats, abilityStats, itemClass } from './items.js';
+import { Showcase } from './showcase.js';
 import { LIGHTING, QUALITY } from './render.js';
 
 const SLOTS = [
@@ -55,11 +56,17 @@ const TEMPLATE = `
 </div>
 
 <div class="screen loadout" data-screen="loadout">
-  <div class="loadout-wrap">
-    <div class="slot-col" data-slots></div>
-    <div class="options">
-      <h2 data-options-title></h2>
-      <div class="option-grid" data-options></div>
+  <div class="locker">
+    <nav class="locker-slots" data-slots></nav>
+    <section class="locker-stage">
+      <div class="stage-floor"></div>
+      <canvas class="stage-canvas" data-stage></canvas>
+      <div class="stage-info" data-stage-info></div>
+      <div class="stage-hint">Drag to spin</div>
+    </section>
+    <div class="locker-items">
+      <div class="items-title" data-options-title></div>
+      <div class="items-row" data-options></div>
     </div>
   </div>
 </div>
@@ -106,12 +113,17 @@ const TEMPLATE = `
 </div>
 
 <div class="screen pause" data-screen="pause">
-  <div class="pause-box">
-    <h2>Paused</h2>
-    <button class="btn primary" type="button" data-action="resume">Resume</button>
-    <button class="btn" type="button" data-action="pause-settings">Settings</button>
-    <button class="btn" type="button" data-action="quit">Main Menu</button>
+  <div class="pause-side">
+    <div class="pause-mode" data-pause-mode></div>
+    <h2 class="pause-title" data-pause-title>Paused</h2>
+    <div class="pause-live" data-pause-live><i></i>Match is still live · you can still get splatted</div>
+    <nav class="pause-nav">
+      <button type="button" class="pnav primary" data-action="resume"><span>Resume</span><kbd data-pause-key></kbd></button>
+      <button type="button" class="pnav" data-action="pause-settings"><span>Settings</span></button>
+      <button type="button" class="pnav danger" data-action="quit"><span data-quit-label>Main Menu</span></button>
+    </nav>
     <div class="hint" data-hint></div>
+    <div class="pause-kit" data-pause-kit></div>
     <p class="note" data-pause-note></p>
   </div>
 </div>`;
@@ -187,7 +199,7 @@ export class Menu {
       const slot = e.target.closest('[data-slot]');
       if (slot) { this.loadoutSlot = slot.dataset.slot; this.refreshLoadout(); }
       const opt = e.target.closest('[data-option]');
-      if (opt) { setLoadout(this.loadoutSlot, opt.dataset.option); this.refreshLoadout(); }
+      if (opt) { setLoadout(this.loadoutSlot, opt.dataset.option); this.previewId = null; this.refreshLoadout(); }
       const q = e.target.closest('[data-q]');
       if (q) {
         settings.quality = q.dataset.q;
@@ -238,6 +250,15 @@ export class Menu {
       onVolume?.(settings.volume);
       this.refreshVolume();
     });
+
+    // Hovering an item tile previews it on the stage; leaving the row goes back to the equipped one.
+    const itemsRow = root.querySelector('[data-options]');
+    itemsRow.addEventListener('pointerover', (e) => {
+      const opt = e.target.closest('[data-option]');
+      if (opt && opt.dataset.option !== this.previewId) { this.previewId = opt.dataset.option; this.refreshStage(); }
+    });
+    itemsRow.addEventListener('pointerleave', () => { this.previewId = null; this.refreshStage(); });
+    this.thumbs = {};
 
     this.bindsEl = root.querySelector('[data-binds]');
     this.bindsEl.addEventListener('click', (e) => {
@@ -310,17 +331,15 @@ export class Menu {
     for (const t of this.root.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === screen);
     this.setHint('');
     if (screen === 'settings') this.refreshSettings();
-    if (screen === 'loadout') this.refreshLoadout();
+    if (screen === 'loadout') this.openLoadout();
+    else this.showcase?.stop();
     if (screen === 'main') {
       this.refreshChips();
       this.refreshName();
       // First launch: ask for a username.
       if (!settings.playerName) this.openNamePrompt();
     }
-    if (screen === 'pause') {
-      this.root.querySelector('[data-pause-note]').textContent =
-        `${keyLabel(settings.keys.menu)} or click Resume to jump back in · Hold Esc to leave fullscreen`;
-    }
+    if (screen === 'pause') this.refreshPause();
   }
 
   // ---------- username ----------
@@ -396,33 +415,89 @@ export class Menu {
       `<span class="chip"><b>${s.label}</b>${this.itemName(s.id, lo[s.id])}</span>`).join('');
   }
 
+  openLoadout() {
+    if (!this.showcase) {
+      try {
+        this.showcase = new Showcase(this.root.querySelector('[data-stage]'));
+        const ids = [...Object.keys(WEAPONS), ...Object.keys(ABILITIES)];
+        this.showcase.thumbnails(ids, (id, url) => {
+          this.thumbs[id] = url;
+          for (const img of this.root.querySelectorAll(`[data-thumb="${id}"]`)) img.src = url;
+        });
+      } catch (err) {
+        console.warn('Loadout showcase unavailable:', err);
+        this.showcase = null;
+      }
+    }
+    this.previewId = null;
+    this.refreshLoadout();
+    this.showcase?.start();
+  }
+
+  item(slot, id) { return slot === 'ability' ? ABILITIES[id] : WEAPONS[id]; }
+
+  thumbHTML(id) {
+    const src = this.thumbs[id];
+    return `<img class="thumb" data-thumb="${id}" alt="" ${src ? `src="${src}"` : ''}>`;
+  }
+
   refreshLoadout() {
     const lo = settings.loadout;
     const keyFor = { primary: settings.keys.primary, secondary: settings.keys.secondary, ability: settings.keys.ability };
-    this.root.querySelector('[data-slots]').innerHTML = SLOTS.map((s) => `
+    this.root.querySelector('[data-slots]').innerHTML = '<div class="locker-head">Loadout</div>' + SLOTS.map((s) => `
       <button type="button" class="slot-card${this.loadoutSlot === s.id ? ' selected' : ''}" data-slot="${s.id}">
-        <span class="slot-label">${s.label} <kbd>${keyLabel(keyFor[s.id])}</kbd></span>
+        <span class="slot-label">${s.label}<kbd>${keyLabel(keyFor[s.id])}</kbd></span>
         <span class="slot-name">${this.itemName(s.id, lo[s.id])}</span>
+        ${this.thumbHTML(lo[s.id])}
       </button>`).join('');
 
     const slot = SLOTS.find((s) => s.id === this.loadoutSlot);
-    this.root.querySelector('[data-options-title]').textContent = slot.title;
     const items = slot.id === 'ability' ? Object.values(ABILITIES) : weaponsForSlot(slot.id);
+    this.root.querySelector('[data-options-title]').innerHTML = `${slot.title}<small>${items.length}</small>`;
     this.root.querySelector('[data-options]').innerHTML = items.map((it) => {
       const equipped = lo[slot.id] === it.id;
-      const stats = slot.id === 'ability' ? abilityStats(it) : weaponStats(it);
-      const meta = slot.id === 'ability'
-        ? `${it.cooldown}s cooldown`
-        : `${it.auto ? 'Full-auto' : 'Semi-auto'} · ${it.mag} rounds`;
       return `
-        <button type="button" class="option${equipped ? ' equipped' : ''}" data-option="${it.id}">
-          ${equipped ? '<span class="badge">Equipped</span>' : ''}
-          <span class="opt-name">${it.name}</span>
-          <span class="opt-meta">${meta}</span>
-          <span class="opt-desc">${it.desc}</span>
-          <span class="stats">${bars(stats)}</span>
+        <button type="button" class="item-tile${equipped ? ' equipped' : ''}" data-option="${it.id}">
+          ${this.thumbHTML(it.id)}
+          <span class="tile-name">${it.name}</span>
+          ${equipped ? '<span class="tile-tag">Equipped</span>' : ''}
         </button>`;
     }).join('');
+    this.refreshStage();
+  }
+
+  refreshStage() {
+    const slot = this.loadoutSlot;
+    const equippedId = settings.loadout[slot];
+    const id = this.previewId ?? equippedId;
+    const it = this.item(slot, id);
+    const stats = slot === 'ability' ? abilityStats(it) : weaponStats(it);
+    const equipped = id === equippedId;
+    const seg = (v) => Array.from({ length: 10 }, (_, i) => `<i class="${i < Math.round(v * 10) ? 'on' : ''}"></i>`).join('');
+    this.root.querySelector('[data-stage-info]').innerHTML = `
+      <div class="stage-class">${itemClass(it)}</div>
+      <div class="stage-name">${it.name}</div>
+      <div class="stage-desc">${it.desc}</div>
+      <div class="stage-stats">${stats.map(([name, v, text]) => `
+        <div class="sstat"><span class="sl">${name}</span><span class="seg">${seg(v)}</span><span class="sv">${text}</span></div>`).join('')}
+      </div>
+      <div class="stage-state${equipped ? ' on' : ''}">${equipped ? 'Equipped' : 'Click to equip'}</div>`;
+    this.showcase?.show(id);
+  }
+
+  // ---------- pause ----------
+  refreshPause() {
+    const online = settings.mode === 'online';
+    const q = (s) => this.root.querySelector(`[data-${s}]`);
+    q('pause-mode').textContent = MODES[settings.mode]?.name ?? '';
+    q('pause-title').textContent = online ? 'Menu' : 'Paused';
+    q('pause-live').classList.toggle('hidden', !online);
+    q('pause-key').textContent = keyLabel(settings.keys.menu);
+    q('quit-label').textContent = online ? 'Leave Match' : 'Main Menu';
+    const lo = settings.loadout;
+    q('pause-kit').innerHTML = SLOTS.map((s) =>
+      `<div class="kit"><b>${s.label}</b><span>${this.itemName(s.id, lo[s.id])}</span></div>`).join('');
+    q('pause-note').textContent = 'Hold Esc to leave fullscreen';
   }
 
   // ---------- settings ----------

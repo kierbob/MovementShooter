@@ -487,19 +487,22 @@ function frame(now) {
 
   if (online.active && net.meFresh) reconcile();
 
-  if (state === 'playing') {
+  // Online the match never stops: with the menu open you keep simulating (standing still) so the
+  // server keeps getting inputs and you can still be shot. Offline modes freeze while paused.
+  const live = state === 'playing' || (state === 'paused' && online.active);
+  if (live) {
     acc += Math.min(dtMs / 1000, 0.25);
     // Fixed-rate simulation, decoupled from frame rate.
     while (acc >= TICK_DT) {
       prevPos = { ...player.pos };
-      if (input.respawnPressed) {
+      if (input.respawnPressed && state === 'playing') {
         input.respawnPressed = false;
         if (arena.active) { /* no free respawns in the arena */ }
         else if (trial.active) trial.restart(player); // on the course, respawn = restart the run
         else respawn(player, SPAWN);
         prevPos = { ...player.pos };
       }
-      let cmd = input.sample(performance.now());
+      let cmd = state === 'playing' ? input.sample(performance.now()) : { ...DEAD_CMD, yaw: input.yaw, pitch: input.pitch };
       if (player.dead) cmd = { ...DEAD_CMD, yaw: cmd.yaw, pitch: cmd.pitch }; // no moving or shooting while splatted
       if (online.active) player.impulseLog = []; // record our own knockback so it can be replayed
       combat.tick(player, cmd, TICK_DT); // before movement so knockback applies this tick
@@ -524,7 +527,7 @@ function frame(now) {
       ticks++;
     }
   } else {
-    acc = 0; // paused / menu: the dev server freezes
+    acc = 0; // paused / menu: offline modes freeze
   }
 
   if (state === 'menu') {
@@ -570,7 +573,7 @@ function frame(now) {
   if (online.active) handleNetEvents(net.takeEvents());
   playCombatSounds(sound, events);
   if (arena.active) handleArenaEvents(events);
-  if (state === 'playing') playMovementSounds(sound, player);
+  if (live) playMovementSounds(sound, player);
   fx.handle(events, player);
   hud.handle(events);
   fx.update(dt, combat, player, input, state !== 'menu' && combat.enabled);

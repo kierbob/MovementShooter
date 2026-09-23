@@ -124,23 +124,40 @@ export function weaponsForSlot(slot) {
   return Object.values(WEAPONS).filter((w) => w.slot === slot);
 }
 
-// 0..1 bars for the loadout screen.
+// Loadout screen stats: [label, 0..1 bar, value text].
+const clamp01 = (v) => Math.min(1, Math.max(0, v));
+const num = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
 export function weaponStats(w) {
   const p = w.projectile?.explode;
-  const perShot = p ? p.damage : w.damage * w.pellets;
+  const dmg = p ? `${p.damage} splash`
+    : w.pellets > 1 ? `${w.damage}×${w.pellets}` : `${w.damage} · ${num(w.damage * w.headMult)} head`;
+  const mob = w.knockback || p?.knockback || 0;
   return [
-    ['Damage', Math.min(1, perShot / 100)],
-    ['Fire rate', Math.min(1, w.fireRate / 16)],
-    ['Magazine', Math.min(1, w.mag / 32)],
-    ['Mobility', Math.min(1, (w.knockback || p?.knockback || 0) / 15)],
+    ['Damage', clamp01((p ? p.damage : w.damage * w.pellets) / 100), dmg],
+    ['Fire rate', clamp01(w.fireRate / 16), `${Math.round(w.fireRate * 60)} rpm`],
+    ['Magazine', clamp01(w.mag / 32), `${w.mag}`],
+    ['Reload', clamp01(1 - (w.reload - 0.8) / 1.4), `${num(w.reload)}s`],
+    ['Mobility', clamp01(mob / 16), mob ? `${num(mob)} m/s` : 'none'],
   ];
 }
 
 export function abilityStats(a) {
   const p = a.projectile;
+  const dmg = p.explode?.damage ?? p.damage;
+  const mob = p.explode?.knockback ?? 0;
   return [
-    ['Damage', Math.min(1, (p.explode?.damage ?? p.damage) / 100)],
-    ['Recharge', Math.min(1, 3 / a.cooldown)],
-    ['Mobility', Math.min(1, (p.explode?.knockback ?? 0) / 17)],
+    ['Damage', clamp01(dmg / 100), p.explode ? `${dmg} splash` : `${dmg}`],
+    ['Recharge', clamp01(3 / a.cooldown), `${a.cooldown}s`],
+    ['Mobility', clamp01(mob / 17), mob ? `${mob} m/s` : 'none'],
   ];
+}
+
+// Short class line shown above the item name.
+export function itemClass(it) {
+  if (!it.slot) return it.projectile.impact === 'stick' ? 'Throwable · Precision' : 'Throwable · Explosive';
+  if (it.type === 'projectile') return 'Launcher · Explosive';
+  if (it.pellets > 1) return 'Shotgun · Mobility';
+  const kind = it.id === 'sniper' ? 'Sniper' : it.slot === 'secondary' ? (it.auto ? 'SMG' : 'Pistol') : 'Rifle';
+  return `${kind} · ${it.auto ? 'Full-auto' : 'Semi-auto'}`;
 }
