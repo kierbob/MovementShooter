@@ -427,6 +427,9 @@ export function stepPlayer(p, cmd, boxes, dt) {
       } else if (speed > wishSpeed && along > 0.7) {
         // Carrying extra speed and still pushing that way: let it fade slowly (momentum!)
         setHorizontalSpeed(p, Math.max(wishSpeed, speed - MOVE.overspeedDecay * dt));
+        // ...and carve toward your aim. Without this, speed above run speed can't be steered at all
+        // (acceleration adds nothing once you're already faster), which feels like ice.
+        steer(p.vel, wishDir, MOVE.groundTurnRate * dt);
       } else {
         applyFriction(p.vel, dt);
       }

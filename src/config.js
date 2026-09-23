@@ -59,7 +59,8 @@ export const MOVE = {
   stopSpeed: 3,       // friction acts as if at least this fast, so you stop crisply
   // Momentum: above your run speed, if you keep holding roughly the way you're going,
   // the extra speed fades slowly instead of friction wiping it out.
-  overspeedDecay: 2.5, // m/s lost per second while carrying extra speed on the ground
+  overspeedDecay: 2.5,
+  groundTurnRate: 7,  // radians/sec you carve toward your aim while above run speed on the ground // m/s lost per second while carrying extra speed on the ground
   landGrace: 0.1,      // no friction this long after landing, so jump chains keep speed
   maxSpeed: 25,       // HARD cap on horizontal speed from any source
   maxFallSpeed: 45,
