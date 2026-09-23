@@ -17,7 +17,7 @@ const TEMPLATE = `
   <nav class="tabs">
     <button class="tab" type="button" data-action="tab-main" data-tab="main">Play</button>
     <button class="tab" type="button" data-action="tab-loadout" data-tab="loadout">Loadout</button>
-    <button class="tab" type="button" data-action="open-settings">Settings</button>
+    <button class="tab" type="button" data-action="open-settings" data-tab="settings">Settings</button>
   </nav>
   <button type="button" class="name-chip" data-action="edit-name" title="Change username"><span data-name-chip></span></button>
   <div class="build">DEV BUILD</div>
@@ -25,8 +25,9 @@ const TEMPLATE = `
 
 <div class="name-prompt hidden" data-name-prompt>
   <form class="name-box" data-name-form>
-    <h2>Choose a username</h2>
-    <p>This is what other players see above your bean.</p>
+    <div class="kicker">Welcome, bean</div>
+    <h2>Pick a name</h2>
+    <p>This is what other players see above your head.</p>
     <input type="text" maxlength="16" placeholder="Your name" data-name-input autocomplete="off" spellcheck="false">
     <div class="name-hint" data-name-hint>Letters, numbers, spaces and _ - . ! ? — up to 16 characters.</div>
     <div class="name-actions">
@@ -47,9 +48,9 @@ const TEMPLATE = `
 
 <div class="screen modes" data-screen="modes">
   <div class="modes-wrap">
-    <div class="modes-head">
-      <h2>Select Mode</h2>
-      <button class="btn ghost" type="button" data-action="tab-main">Back</button>
+    <div class="screen-head">
+      <div><div class="kicker">Choose how to play</div><h2>Select Mode</h2></div>
+      <button class="back-btn" type="button" data-action="tab-main"><span>Back</span><kbd>Esc</kbd></button>
     </div>
     <div class="mode-grid" data-modes></div>
   </div>
@@ -72,42 +73,50 @@ const TEMPLATE = `
 </div>
 
 <div class="screen settings" data-screen="settings">
-  <div class="panel">
-    <div class="panel-head">
-      <h2>Settings</h2>
-      <button class="btn ghost" type="button" data-action="settings-back">Back</button>
-    </div>
-    <section>
-      <h3>Mouse</h3>
-      <div class="row">
-        <label for="sens-range">Sensitivity</label>
-        <input type="range" id="sens-range" min="0.1" max="10" step="0.01">
-        <input type="number" id="sens-num" min="0.05" max="20" step="0.01">
+  <div class="set-wrap">
+    <nav class="set-nav">
+      <div class="locker-head">Settings</div>
+      <button type="button" class="set-tab" data-sec-tab="mouse"><span>Mouse</span></button>
+      <button type="button" class="set-tab" data-sec-tab="audio"><span>Audio</span></button>
+      <button type="button" class="set-tab" data-sec-tab="graphics"><span>Graphics</span></button>
+      <button type="button" class="set-tab" data-sec-tab="controls"><span>Controls</span></button>
+      <div class="set-nav-foot">
+        <button class="back-btn" type="button" data-action="settings-back"><span>Back</span><kbd>Esc</kbd></button>
       </div>
-      <div class="row sub"><span data-sens-info></span></div>
-      <div class="row sub"><span>Same scale as CS2 / Apex — use your usual sens.</span></div>
-    </section>
-    <section>
-      <h3>Audio</h3>
-      <div class="row">
-        <label for="vol-range">Volume</label>
-        <input type="range" id="vol-range" min="0" max="1" step="0.01">
-        <span class="vol-num" data-vol-num></span>
-      </div>
-    </section>
-    <section>
-      <h3>Graphics</h3>
-      <div class="light-grid" data-lights></div>
-      <div class="row quality-row"><label>Quality</label><div class="quality-btns" data-quality></div></div>
-      <div class="row sub"><span>Lower quality = fewer pixels and simpler shadows. Try Performance if you get frame drops.</span></div>
-    </section>
-    <section>
-      <h3>Keybinds</h3>
-      <div class="binds" data-binds></div>
-      <p class="note">Click a bind, then press a key or mouse button. Esc cancels. Binding something already used swaps them.</p>
-    </section>
-    <div class="panel-foot">
-      <button class="btn ghost" type="button" data-action="reset">Reset controls to defaults</button>
+    </nav>
+    <div class="set-body">
+      <section class="set-sec" data-sec="mouse">
+        <div class="kicker">Aim</div><h2>Mouse</h2>
+        <div class="set-row">
+          <label for="sens-range">Sensitivity</label>
+          <input type="range" id="sens-range" min="0.1" max="10" step="0.01">
+          <input type="number" id="sens-num" min="0.05" max="20" step="0.01">
+        </div>
+        <div class="set-note" data-sens-info></div>
+        <div class="set-note">Same scale as CS2 / Apex, so use your usual sens.</div>
+      </section>
+      <section class="set-sec" data-sec="audio">
+        <div class="kicker">Sound</div><h2>Audio</h2>
+        <div class="set-row">
+          <label for="vol-range">Master volume</label>
+          <input type="range" id="vol-range" min="0" max="1" step="0.01">
+          <span class="set-val" data-vol-num></span>
+        </div>
+      </section>
+      <section class="set-sec" data-sec="graphics">
+        <div class="kicker">Look &amp; performance</div><h2>Graphics</h2>
+        <div class="set-label">Lighting</div>
+        <div class="light-grid" data-lights></div>
+        <div class="set-label">Quality</div>
+        <div class="quality-btns" data-quality></div>
+        <div class="set-note">Lower quality = fewer pixels and simpler shadows. Try Performance if you get frame drops.</div>
+      </section>
+      <section class="set-sec" data-sec="controls">
+        <div class="kicker">Keybinds</div><h2>Controls</h2>
+        <div class="binds" data-binds></div>
+        <div class="set-note">Click a bind, then press a key or mouse button. Esc cancels. Binding something already used swaps them.</div>
+        <button class="back-btn reset" type="button" data-action="reset"><span>Reset controls to defaults</span></button>
+      </section>
     </div>
   </div>
 </div>
@@ -196,6 +205,8 @@ export class Menu {
     root.addEventListener('click', (e) => {
       const btn = e.target.closest('[data-action]');
       if (btn) actions[btn.dataset.action]?.();
+      const secTab = e.target.closest('[data-sec-tab]');
+      if (secTab) { this.settingsSec = secTab.dataset.secTab; this.refreshSettingsTab(); return; }
       const slot = e.target.closest('[data-slot]');
       if (slot) { this.loadoutSlot = slot.dataset.slot; this.refreshLoadout(); }
       const opt = e.target.closest('[data-option]');
@@ -326,7 +337,9 @@ export class Menu {
     for (const el of this.root.querySelectorAll('[data-screen]')) {
       el.classList.toggle('hidden', el.dataset.screen !== screen);
     }
-    this.root.querySelector('[data-topbar]').classList.toggle('hidden', !['main', 'loadout', 'modes'].includes(screen));
+    const withTopbar = ['main', 'loadout', 'modes'].includes(screen) || (screen === 'settings' && this.settingsBack !== 'pause');
+    this.root.querySelector('[data-topbar]').classList.toggle('hidden', !withTopbar);
+    this.root.querySelector('[data-screen="settings"]').classList.toggle('over-game', this.settingsBack === 'pause');
     if (screen === 'modes') this.refreshModes();
     for (const t of this.root.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === screen);
     this.setHint('');
@@ -501,7 +514,14 @@ export class Menu {
   }
 
   // ---------- settings ----------
+  refreshSettingsTab() {
+    const sec = this.settingsSec ?? 'mouse';
+    for (const el of this.root.querySelectorAll('[data-sec]')) el.classList.toggle('hidden', el.dataset.sec !== sec);
+    for (const el of this.root.querySelectorAll('[data-sec-tab]')) el.classList.toggle('selected', el.dataset.secTab === sec);
+  }
+
   refreshSettings() {
+    this.refreshSettingsTab();
     this.refreshSens();
     this.refreshVolume();
     this.refreshLights();
@@ -512,7 +532,7 @@ export class Menu {
     this.root.querySelector('[data-lights]').innerHTML = Object.entries(LIGHTING).map(([id, L]) => `
       <button type="button" class="light${settings.lighting === id ? ' on' : ''}" data-light="${id}">
         <span class="swatch" style="background: linear-gradient(180deg, ${L.sky[0]}, ${L.sky[1]})"></span>
-        ${L.label}
+        <span class="light-name">${L.label}</span>
       </button>`).join('');
     this.root.querySelector('[data-quality]').innerHTML = Object.entries(QUALITY).map(([id, Q]) =>
       `<button type="button" class="diff${settings.quality === id ? ' on' : ''}" data-q="${id}">${Q.label}</button>`).join('');
@@ -520,20 +540,24 @@ export class Menu {
 
   refreshVolume() {
     this.volRange.value = settings.volume;
+    this.volRange.style.setProperty('--fill', `${settings.volume * 100}%`);
     this.root.querySelector('[data-vol-num]').textContent = `${Math.round(settings.volume * 100)}%`;
   }
 
   refreshSens() {
     this.sensRange.value = settings.sensitivity;
+    this.sensRange.style.setProperty('--fill', `${Math.min(100, ((settings.sensitivity - 0.1) / 9.9) * 100)}%`);
     this.sensNum.value = settings.sensitivity.toFixed(2);
     this.root.querySelector('[data-sens-info]').textContent =
       `${cmPer360(800).toFixed(1)} cm/360° at 800 DPI · ${cmPer360(1600).toFixed(1)} cm/360° at 1600 DPI`;
   }
 
   refreshBinds() {
+    const GROUPS = { forward: 'Movement', fire: 'Combat', menu: 'Other' };
     this.bindsEl.innerHTML = ACTIONS.map((a) => {
       const listening = this.listening === a.id;
-      return `<div class="bind-row">
+      const head = GROUPS[a.id] ? `<div class="bind-group">${GROUPS[a.id]}</div>` : '';
+      return `${head}<div class="bind-row">
         <span>${a.label}</span>
         <button type="button" class="key${listening ? ' listening' : ''}" data-bind="${a.id}">
           ${listening ? 'Press a key…' : keyLabel(settings.keys[a.id])}
