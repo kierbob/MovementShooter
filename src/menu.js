@@ -1,0 +1,388 @@
+import {
+  ACTIONS, settings, bindKey, resetSettings, saveSettings, setLoadout, keyLabel, cmPer360,
+} from './settings.js';
+import { WEAPONS, ABILITIES, weaponsForSlot, weaponStats, abilityStats } from './items.js';
+import { LIGHTING, QUALITY } from './render.js';
+
+const SLOTS = [
+  { id: 'primary', label: 'Primary', title: 'Primary Weapons' },
+  { id: 'secondary', label: 'Secondary', title: 'Secondary Weapons' },
+  { id: 'ability', label: 'Ability', title: 'Abilities' },
+];
+
+const TEMPLATE = `
+<header class="topbar" data-topbar>
+  <div class="logo">MOVEMENT <span>SHOOTER</span></div>
+  <nav class="tabs">
+    <button class="tab" type="button" data-action="tab-main" data-tab="main">Play</button>
+    <button class="tab" type="button" data-action="tab-loadout" data-tab="loadout">Loadout</button>
+    <button class="tab" type="button" data-action="open-settings">Settings</button>
+  </nav>
+  <div class="build">DEV BUILD</div>
+</header>
+
+<div class="screen main" data-screen="main">
+  <div class="mode-area">
+    <div class="loadout-chips" data-chips></div>
+    <button type="button" class="mode-card" data-action="open-modes" data-current-mode></button>
+    <button class="play-btn" type="button" data-action="play">Play</button>
+    <div class="hint" data-hint></div>
+  </div>
+</div>
+
+<div class="screen modes" data-screen="modes">
+  <div class="modes-wrap">
+    <div class="modes-head">
+      <h2>Select Mode</h2>
+      <button class="btn ghost" type="button" data-action="tab-main">Back</button>
+    </div>
+    <div class="mode-grid" data-modes></div>
+  </div>
+</div>
+
+<div class="screen loadout" data-screen="loadout">
+  <div class="loadout-wrap">
+    <div class="slot-col" data-slots></div>
+    <div class="options">
+      <h2 data-options-title></h2>
+      <div class="option-grid" data-options></div>
+    </div>
+  </div>
+</div>
+
+<div class="screen settings" data-screen="settings">
+  <div class="panel">
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <button class="btn ghost" type="button" data-action="settings-back">Back</button>
+    </div>
+    <section>
+      <h3>Mouse</h3>
+      <div class="row">
+        <label for="sens-range">Sensitivity</label>
+        <input type="range" id="sens-range" min="0.1" max="10" step="0.01">
+        <input type="number" id="sens-num" min="0.05" max="20" step="0.01">
+      </div>
+      <div class="row sub"><span data-sens-info></span></div>
+      <div class="row sub"><span>Same scale as CS2 / Apex — use your usual sens.</span></div>
+    </section>
+    <section>
+      <h3>Audio</h3>
+      <div class="row">
+        <label for="vol-range">Volume</label>
+        <input type="range" id="vol-range" min="0" max="1" step="0.01">
+        <span class="vol-num" data-vol-num></span>
+      </div>
+    </section>
+    <section>
+      <h3>Graphics</h3>
+      <div class="light-grid" data-lights></div>
+      <div class="row quality-row"><label>Quality</label><div class="quality-btns" data-quality></div></div>
+      <div class="row sub"><span>Lower quality = fewer pixels and simpler shadows. Try Performance if you get frame drops.</span></div>
+    </section>
+    <section>
+      <h3>Keybinds</h3>
+      <div class="binds" data-binds></div>
+      <p class="note">Click a bind, then press a key or mouse button. Esc cancels. Binding something already used swaps them.</p>
+    </section>
+    <div class="panel-foot">
+      <button class="btn ghost" type="button" data-action="reset">Reset controls to defaults</button>
+    </div>
+  </div>
+</div>
+
+<div class="screen pause" data-screen="pause">
+  <div class="pause-box">
+    <h2>Paused</h2>
+    <button class="btn primary" type="button" data-action="resume">Resume</button>
+    <button class="btn" type="button" data-action="pause-settings">Settings</button>
+    <button class="btn" type="button" data-action="quit">Main Menu</button>
+    <div class="hint" data-hint></div>
+    <p class="note" data-pause-note></p>
+  </div>
+</div>`;
+
+export const MODES = {
+  dev: {
+    tag: 'Sandbox', name: 'Dev Server', art: 'DEV', grad: 'linear-gradient(135deg, #2f6bff 0%, #8a3dff 100%)',
+    desc: 'Movement playground · bean dummies · time trials · Solo',
+  },
+  arena: {
+    tag: 'Aim Training', name: 'Bot Arena', art: 'BOTS', grad: 'linear-gradient(135deg, #ff4fd8 0%, #7a2dff 100%)',
+    desc: 'Free-for-all against bean bots that fight back',
+  },
+};
+const DIFFS = [['easy', 'Easy', '4 bots'], ['normal', 'Normal', '6 bots'], ['hard', 'Hard', '8 bots']];
+
+function modeCardHTML(id, extra = '') {
+  const m = MODES[id];
+  const diff = id === 'arena' ? ` · ${DIFFS.find((d) => d[0] === settings.difficulty)[1]}` : '';
+  return `
+    <div class="mode-art" style="background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 28px), repeating-linear-gradient(90deg, rgba(255,255,255,0.08) 0 2px, transparent 2px 28px), ${m.grad}">
+      <span>${m.art}</span>${extra}
+    </div>
+    <div class="mode-info">
+      <div class="mode-tag">${m.tag}${diff}</div>
+      <div class="mode-name">${m.name}</div>
+      <div class="mode-desc">${m.desc}</div>
+    </div>`;
+}
+
+const bars = (stats) => stats.map(([name, v]) =>
+  `<div class="stat"><span>${name}</span><div class="bar"><i style="width:${Math.round(v * 100)}%"></i></div></div>`,
+).join('');
+
+// Main menu, loadout, pause menu and settings. Pure DOM; the game tells it which screen to show.
+export class Menu {
+  constructor(root, { onPlay, onResume, onQuit, onVolume, onLighting, onQuality }) {
+    this.onLighting = onLighting;
+    this.onQuality = onQuality;
+    this.root = root;
+    this.screen = null;
+    this.settingsBack = 'main';
+    this.listening = null; // action id waiting for a new key
+    this.loadoutSlot = 'primary';
+    root.innerHTML = TEMPLATE;
+
+    const actions = {
+      play: onPlay,
+      resume: onResume,
+      quit: onQuit,
+      'tab-main': () => this.show('main'),
+      'open-modes': () => this.show('modes'),
+      'tab-loadout': () => this.show('loadout'),
+      'open-settings': () => this.openSettings(this.screen === 'loadout' ? 'loadout' : 'main'),
+      'pause-settings': () => this.openSettings('pause'),
+      'settings-back': () => this.show(this.settingsBack),
+      reset: () => { resetSettings(); this.refreshSettings(); },
+    };
+    root.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]');
+      if (btn) actions[btn.dataset.action]?.();
+      const slot = e.target.closest('[data-slot]');
+      if (slot) { this.loadoutSlot = slot.dataset.slot; this.refreshLoadout(); }
+      const opt = e.target.closest('[data-option]');
+      if (opt) { setLoadout(this.loadoutSlot, opt.dataset.option); this.refreshLoadout(); }
+      const q = e.target.closest('[data-q]');
+      if (q) {
+        settings.quality = q.dataset.q;
+        saveSettings();
+        this.onQuality?.(settings.quality);
+        this.refreshLights();
+        return;
+      }
+      const light = e.target.closest('[data-light]');
+      if (light) {
+        settings.lighting = light.dataset.light;
+        saveSettings();
+        this.onLighting?.(settings.lighting);
+        this.refreshLights();
+        return;
+      }
+      const diff = e.target.closest('[data-diff]');
+      if (diff) {
+        settings.mode = 'arena';
+        settings.difficulty = diff.dataset.diff;
+        saveSettings();
+        this.refreshModes();
+        return;
+      }
+      const pick = e.target.closest('[data-pick-mode]');
+      if (pick) {
+        settings.mode = pick.dataset.pickMode;
+        saveSettings();
+        this.show('main');
+      }
+    });
+
+    this.sensRange = root.querySelector('#sens-range');
+    this.sensNum = root.querySelector('#sens-num');
+    const setSens = (v) => {
+      if (!Number.isFinite(v) || v <= 0) return;
+      settings.sensitivity = Math.min(20, Math.max(0.05, v));
+      saveSettings();
+      this.refreshSens();
+    };
+    this.sensRange.addEventListener('input', () => setSens(parseFloat(this.sensRange.value)));
+    this.sensNum.addEventListener('change', () => setSens(parseFloat(this.sensNum.value)));
+
+    this.volRange = root.querySelector('#vol-range');
+    this.volRange.addEventListener('input', () => {
+      settings.volume = parseFloat(this.volRange.value);
+      saveSettings();
+      onVolume?.(settings.volume);
+      this.refreshVolume();
+    });
+
+    this.bindsEl = root.querySelector('[data-binds]');
+    this.bindsEl.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-bind]');
+      if (!btn) return;
+      this.listening = btn.dataset.bind;
+      this.refreshBinds();
+    });
+
+    // Capture phase so a key/button pressed while rebinding never reaches the game.
+    window.addEventListener('keydown', (e) => this.onKey(e), true);
+    window.addEventListener('mousedown', (e) => {
+      if (!this.listening) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.swallowClickUntil = performance.now() + 600;
+      this.finishBind('Mouse' + e.button);
+    }, true);
+    // The click that follows a mouse-button bind must not start listening again.
+    window.addEventListener('click', (e) => {
+      if (performance.now() < (this.swallowClickUntil ?? 0)) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.swallowClickUntil = 0;
+      }
+    }, true);
+  }
+
+  finishBind(code) {
+    if (code !== 'Escape') bindKey(this.listening, code);
+    this.listening = null;
+    this.refreshBinds();
+  }
+
+  onKey(e) {
+    if (this.listening) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.finishBind(e.code);
+      return;
+    }
+    if (e.code !== 'Escape') return;
+    if (this.screen === 'settings') this.show(this.settingsBack);
+    else if (this.screen === 'loadout' || this.screen === 'modes') this.show('main');
+  }
+
+  show(screen) {
+    this.screen = screen;
+    this.listening = null;
+    this.root.classList.toggle('hidden', !screen);
+    for (const el of this.root.querySelectorAll('[data-screen]')) {
+      el.classList.toggle('hidden', el.dataset.screen !== screen);
+    }
+    this.root.querySelector('[data-topbar]').classList.toggle('hidden', !['main', 'loadout', 'modes'].includes(screen));
+    if (screen === 'modes') this.refreshModes();
+    for (const t of this.root.querySelectorAll('[data-tab]')) t.classList.toggle('active', t.dataset.tab === screen);
+    this.setHint('');
+    if (screen === 'settings') this.refreshSettings();
+    if (screen === 'loadout') this.refreshLoadout();
+    if (screen === 'main') this.refreshChips();
+    if (screen === 'pause') {
+      this.root.querySelector('[data-pause-note]').textContent =
+        `${keyLabel(settings.keys.menu)} or click Resume to jump back in · Hold Esc to leave fullscreen`;
+    }
+  }
+
+  openSettings(from) {
+    this.settingsBack = from;
+    this.show('settings');
+  }
+
+  setHint(text) {
+    for (const el of this.root.querySelectorAll('[data-hint]')) el.textContent = text;
+  }
+
+  // ---------- loadout ----------
+  itemName(slot, id) {
+    return slot === 'ability' ? ABILITIES[id].name : WEAPONS[id].name;
+  }
+
+  refreshModes() {
+    this.root.querySelector('[data-modes]').innerHTML = Object.keys(MODES).map((id) => {
+      const selected = settings.mode === id;
+      const diffs = id === 'arena'
+        ? `<div class="diff-row">${DIFFS.map(([d, label, count]) =>
+          `<button type="button" class="diff${settings.difficulty === d ? ' on' : ''}" data-diff="${d}">${label}<small>${count}</small></button>`).join('')}</div>`
+        : '';
+      return `
+        <div class="mode-pick${selected ? ' selected' : ''}">
+          <button type="button" class="mode-card" data-pick-mode="${id}">${modeCardHTML(id, selected ? '<em class="badge">Selected</em>' : '')}</button>
+          ${diffs}
+        </div>`;
+    }).join('');
+  }
+
+  refreshChips() {
+    this.root.querySelector('[data-current-mode]').innerHTML = modeCardHTML(settings.mode, '<em class="change">Change mode</em>');
+    const lo = settings.loadout;
+    this.root.querySelector('[data-chips]').innerHTML = SLOTS.map((s) =>
+      `<span class="chip"><b>${s.label}</b>${this.itemName(s.id, lo[s.id])}</span>`).join('');
+  }
+
+  refreshLoadout() {
+    const lo = settings.loadout;
+    const keyFor = { primary: settings.keys.primary, secondary: settings.keys.secondary, ability: settings.keys.ability };
+    this.root.querySelector('[data-slots]').innerHTML = SLOTS.map((s) => `
+      <button type="button" class="slot-card${this.loadoutSlot === s.id ? ' selected' : ''}" data-slot="${s.id}">
+        <span class="slot-label">${s.label} <kbd>${keyLabel(keyFor[s.id])}</kbd></span>
+        <span class="slot-name">${this.itemName(s.id, lo[s.id])}</span>
+      </button>`).join('');
+
+    const slot = SLOTS.find((s) => s.id === this.loadoutSlot);
+    this.root.querySelector('[data-options-title]').textContent = slot.title;
+    const items = slot.id === 'ability' ? Object.values(ABILITIES) : weaponsForSlot(slot.id);
+    this.root.querySelector('[data-options]').innerHTML = items.map((it) => {
+      const equipped = lo[slot.id] === it.id;
+      const stats = slot.id === 'ability' ? abilityStats(it) : weaponStats(it);
+      const meta = slot.id === 'ability'
+        ? `${it.cooldown}s cooldown`
+        : `${it.auto ? 'Full-auto' : 'Semi-auto'} · ${it.mag} rounds`;
+      return `
+        <button type="button" class="option${equipped ? ' equipped' : ''}" data-option="${it.id}">
+          ${equipped ? '<span class="badge">Equipped</span>' : ''}
+          <span class="opt-name">${it.name}</span>
+          <span class="opt-meta">${meta}</span>
+          <span class="opt-desc">${it.desc}</span>
+          <span class="stats">${bars(stats)}</span>
+        </button>`;
+    }).join('');
+  }
+
+  // ---------- settings ----------
+  refreshSettings() {
+    this.refreshSens();
+    this.refreshVolume();
+    this.refreshLights();
+    this.refreshBinds();
+  }
+
+  refreshLights() {
+    this.root.querySelector('[data-lights]').innerHTML = Object.entries(LIGHTING).map(([id, L]) => `
+      <button type="button" class="light${settings.lighting === id ? ' on' : ''}" data-light="${id}">
+        <span class="swatch" style="background: linear-gradient(180deg, ${L.sky[0]}, ${L.sky[1]})"></span>
+        ${L.label}
+      </button>`).join('');
+    this.root.querySelector('[data-quality]').innerHTML = Object.entries(QUALITY).map(([id, Q]) =>
+      `<button type="button" class="diff${settings.quality === id ? ' on' : ''}" data-q="${id}">${Q.label}</button>`).join('');
+  }
+
+  refreshVolume() {
+    this.volRange.value = settings.volume;
+    this.root.querySelector('[data-vol-num]').textContent = `${Math.round(settings.volume * 100)}%`;
+  }
+
+  refreshSens() {
+    this.sensRange.value = settings.sensitivity;
+    this.sensNum.value = settings.sensitivity.toFixed(2);
+    this.root.querySelector('[data-sens-info]').textContent =
+      `${cmPer360(800).toFixed(1)} cm/360° at 800 DPI · ${cmPer360(1600).toFixed(1)} cm/360° at 1600 DPI`;
+  }
+
+  refreshBinds() {
+    this.bindsEl.innerHTML = ACTIONS.map((a) => {
+      const listening = this.listening === a.id;
+      return `<div class="bind-row">
+        <span>${a.label}</span>
+        <button type="button" class="key${listening ? ' listening' : ''}" data-bind="${a.id}">
+          ${listening ? 'Press a key…' : keyLabel(settings.keys[a.id])}
+        </button>
+      </div>`;
+    }).join('');
+  }
+}

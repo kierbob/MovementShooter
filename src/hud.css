@@ -1,0 +1,184 @@
+#hud {
+  position: fixed; inset: 0; z-index: 9; pointer-events: none;
+  font-family: 'Bebas Neue', 'Arial Narrow', sans-serif; color: #f2f5ff;
+}
+body[data-state="menu"] #hud { display: none; }
+
+/* per-weapon crosshair: dark outline pass + white pass */
+.crosshair { position: fixed; left: 50%; top: 50%; margin: -100px 0 0 -100px; overflow: visible; }
+.crosshair .xo { stroke: #15151f; stroke-width: 5; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.crosshair .xi { stroke: #ffffff; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.crosshair .xo .dot { fill: #15151f; }
+.crosshair .xi .dot { fill: #ffffff; stroke: none; }
+
+/* hitmarker: four short diagonal ticks around the crosshair */
+.hitmarker { position: fixed; left: 50%; top: 50%; width: 0; height: 0; opacity: 0; }
+.hitmarker.show { opacity: 1; }
+.hitmarker i {
+  position: absolute; width: 9px; height: 2px; background: #fff; box-shadow: 0 0 2px #000;
+  left: -4.5px; top: -1px;
+}
+.hitmarker i:nth-child(1) { transform: rotate(45deg) translateX(-10px); }
+.hitmarker i:nth-child(2) { transform: rotate(135deg) translateX(-10px); }
+.hitmarker i:nth-child(3) { transform: rotate(225deg) translateX(-10px); }
+.hitmarker i:nth-child(4) { transform: rotate(315deg) translateX(-10px); }
+.hitmarker.head i { background: #ffd84a; }
+.hitmarker.kill i { background: #ff4a4a; width: 13px; left: -6.5px; }
+
+/* floating damage numbers, colored by hit zone */
+.dmg-layer { position: fixed; inset: 0; overflow: hidden; }
+.dmg {
+  position: absolute; left: 0; top: 0; font-size: 26px; letter-spacing: 1px;
+  text-shadow: 0 2px 0 rgba(0,0,0,0.6), 0 0 6px rgba(0,0,0,0.5); will-change: transform, opacity;
+}
+.dmg.body { color: #ffffff; }
+.dmg.legs { color: #a9b8d8; font-size: 22px; }
+.dmg.head { color: #ffd84a; font-size: 32px; }
+.dmg.kill { color: #ff4a4a; font-size: 34px; }
+
+/* comic words: BLAM! KABOOM! BONK! */
+.word-layer { position: fixed; inset: 0; overflow: hidden; }
+.comic-word {
+  position: absolute; transform: translate(-50%, -50%) rotate(var(--rot));
+  font-family: 'Bangers', 'Bebas Neue', sans-serif; letter-spacing: 2px; line-height: 1;
+  color: #ffe14d; -webkit-text-stroke: 2px #15151f; paint-order: stroke fill;
+  text-shadow: 3px 3px 0 #15151f;
+  animation: comic-pop 0.8s ease-out forwards; will-change: transform, opacity;
+}
+.comic-word.small { font-size: 30px; }
+.comic-word.big { font-size: 48px; color: #ffb020; }
+.comic-word.head { font-size: 40px; color: #ffe14d; }
+.comic-word.kill { font-size: 52px; color: #ff4a4a; }
+.comic-word.blue { font-size: 44px; color: #6fe6ff; }
+@keyframes comic-pop {
+  0%   { transform: translate(-50%, -50%) rotate(var(--rot)) scale(0.3); opacity: 1; }
+  18%  { transform: translate(-50%, -50%) rotate(var(--rot)) scale(1.25); }
+  30%  { transform: translate(-50%, -50%) rotate(var(--rot)) scale(1); }
+  70%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) rotate(var(--rot)) scale(0.9); opacity: 0; }
+}
+
+/* time trial clock, top center */
+.trial-timer {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); text-align: center; display: none;
+  font-family: 'Bangers', 'Bebas Neue', sans-serif; letter-spacing: 2px;
+  -webkit-text-stroke: 1.5px #15151f; paint-order: stroke fill; text-shadow: 3px 3px 0 #15151f;
+}
+.trial-timer.show { display: block; }
+.trial-mode { font-size: 20px; color: #ffe14d; }
+.trial-time { font-size: 60px; line-height: 1; color: #9ff0ff; }
+.trial-timer.running .trial-time { color: #ffffff; }
+.trial-best { font-size: 18px; color: #d8def5; }
+
+/* guns-off mode: no weapon HUD, just a plain dot to aim your movement */
+.plain-dot {
+  position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%;
+  background: #fff; box-shadow: 0 0 0 2px #15151f; display: none;
+}
+body[data-guns="off"] .plain-dot { display: block; }
+body[data-guns="off"] .crosshair,
+body[data-guns="off"] .weapon-panel,
+body[data-guns="off"] .ability { display: none; }
+
+/* ---------- bot arena ---------- */
+.health, .arena-score, .killfeed { display: none; }
+body[data-mode="arena"] .health,
+body[data-mode="arena"] .arena-score,
+body[data-mode="arena"] .killfeed { display: block; }
+
+.health { position: fixed; left: 28px; bottom: 24px; width: 260px; }
+.hp-num { font-size: 56px; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,0.45); }
+.hp-bar {
+  height: 16px; border-radius: 8px; overflow: hidden; margin-top: 4px;
+  background: rgba(0,0,0,0.45); border: 2px solid #15151f; transform: skewX(-10deg);
+}
+.hp-bar div { height: 100%; width: 100%; background: linear-gradient(90deg, #5ee06a, #9df27a); transition: width 0.12s; }
+.health.low .hp-num { color: #ff6a5a; }
+.health.low .hp-bar div { background: linear-gradient(90deg, #e5534b, #ff8a6a); }
+.health.protected .hp-bar { box-shadow: 0 0 0 3px #7ab8ff; }
+
+.vignette {
+  position: fixed; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at center, rgba(255,0,0,0) 55%, rgba(220,20,40,0.65) 100%);
+}
+.dmg-dir { position: fixed; left: 50%; top: 50%; width: 240px; height: 240px; opacity: 0; }
+.dmg-dir i {
+  position: absolute; left: 50%; top: 0; width: 0; height: 0; margin-left: -18px;
+  border-left: 18px solid transparent; border-right: 18px solid transparent; border-bottom: 26px solid #ff3b5c;
+  filter: drop-shadow(0 0 2px #15151f) drop-shadow(0 0 1px #15151f);
+}
+
+.arena-score {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  font-family: 'Bangers', 'Bebas Neue', sans-serif; font-size: 34px; letter-spacing: 2px; color: #fff;
+  -webkit-text-stroke: 1.5px #15151f; paint-order: stroke fill; text-shadow: 3px 3px 0 #15151f;
+}
+.arena-score small { font-size: 18px; color: #ffe14d; }
+.arena-score b { margin: 0 14px; color: #ffe14d; }
+
+.killfeed { position: fixed; top: 14px; right: 18px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.feed-item {
+  font-family: system-ui, sans-serif; font-size: 14px; font-weight: 600; padding: 5px 12px; border-radius: 6px;
+  background: rgba(8, 12, 40, 0.75); border: 1px solid rgba(255,255,255,0.15); color: #f2f5ff;
+}
+.feed-item b { font-family: 'Bangers', sans-serif; font-weight: 400; letter-spacing: 1px; font-size: 16px; }
+.feed-item .you { color: #ffe14d; }
+.feed-item .bot { color: #c6a8ff; }
+.feed-item .verb { color: #ff4a4a; margin: 0 6px; }
+.feed-item.mine { border-color: #ffe14d; }
+.feed-item.died { border-color: #ff4a4a; }
+
+.death {
+  position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(40,0,20,0.35), rgba(40,0,20,0.75));
+}
+.death.show { display: flex; }
+.death-word {
+  font-family: 'Bangers', sans-serif; font-size: 110px; letter-spacing: 4px; color: #ff4a4a;
+  -webkit-text-stroke: 3px #15151f; paint-order: stroke fill; text-shadow: 6px 6px 0 #15151f;
+  transform: rotate(-6deg);
+}
+.death.show .death-word { animation: death-pop 0.5s ease-out; }
+@keyframes death-pop {
+  0% { transform: rotate(-6deg) scale(0.3); }
+  60% { transform: rotate(-6deg) scale(1.15); }
+  100% { transform: rotate(-6deg) scale(1); }
+}
+.death-sub { font-family: 'Bebas Neue', sans-serif; font-size: 28px; letter-spacing: 2px; color: #fff; margin-top: 8px; }
+
+/* weapon panel, bottom right */
+.weapon-panel {
+  position: fixed; right: 28px; bottom: 24px; min-width: 220px; text-align: right;
+}
+.slots { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; margin-bottom: 4px; }
+.slot {
+  font-size: 18px; letter-spacing: 1px; padding: 2px 10px; border-radius: 4px;
+  background: rgba(0,0,0,0.35); color: rgba(242,245,255,0.55);
+}
+.slot b { font-family: ui-monospace, Consolas, monospace; font-size: 11px; margin-right: 8px; opacity: 0.8; }
+.slot.active { background: rgba(255,225,53,0.9); color: #15151a; }
+.ammo { font-size: 64px; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,0.45); }
+.ammo.low { color: #ff6a5a; }
+.ammo small { font-size: 28px; opacity: 0.7; }
+.reload { height: 4px; background: rgba(0,0,0,0.4); border-radius: 2px; overflow: hidden; opacity: 0; margin-top: 4px; }
+.reload.show { opacity: 1; }
+.reload div { height: 100%; width: 0; background: #ffe135; }
+
+/* ability, left of the weapon panel */
+.ability { position: fixed; right: 270px; bottom: 30px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ability-icon {
+  position: relative; width: 58px; height: 58px; border-radius: 50%; overflow: hidden;
+  background: rgba(20, 30, 70, 0.75); border: 3px solid rgba(255,255,255,0.35);
+  display: flex; align-items: center; justify-content: center; font-size: 26px;
+}
+.ability.ready .ability-icon { border-color: #ffe135; box-shadow: 0 0 12px rgba(255,225,53,0.5); }
+.ability-cd {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font: 600 14px ui-monospace, Consolas, monospace; color: #fff; z-index: 1;
+}
+.ability-name { font-size: 16px; letter-spacing: 1px; text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+
+@media (max-width: 640px) {
+  .ability { right: auto; left: 16px; }
+  .weapon-panel { right: 16px; }
+}
