@@ -1,0 +1,4 @@
+{
+  "//": "Marks src/ as ES modules so the Node multiplayer server can import the shared game code without warnings.",
+  "type": "module"
+}

@@ -18,8 +18,22 @@ const TEMPLATE = `
     <button class="tab" type="button" data-action="tab-loadout" data-tab="loadout">Loadout</button>
     <button class="tab" type="button" data-action="open-settings">Settings</button>
   </nav>
+  <button type="button" class="name-chip" data-action="edit-name" title="Change username"><span data-name-chip></span></button>
   <div class="build">DEV BUILD</div>
 </header>
+
+<div class="name-prompt hidden" data-name-prompt>
+  <form class="name-box" data-name-form>
+    <h2>Choose a username</h2>
+    <p>This is what other players see above your bean.</p>
+    <input type="text" maxlength="16" placeholder="Your name" data-name-input autocomplete="off" spellcheck="false">
+    <div class="name-hint" data-name-hint>Letters, numbers, spaces and _ - . ! ? — up to 16 characters.</div>
+    <div class="name-actions">
+      <button class="btn ghost" type="button" data-action="skip-name">Skip</button>
+      <button class="btn primary" type="submit">Let's go!</button>
+    </div>
+  </form>
+</div>
 
 <div class="screen main" data-screen="main">
   <div class="mode-area">
@@ -111,6 +125,10 @@ export const MODES = {
     tag: 'Aim Training', name: 'Bot Arena', art: 'BOTS', grad: 'linear-gradient(135deg, #ff4fd8 0%, #7a2dff 100%)',
     desc: 'Free-for-all against bean bots that fight back',
   },
+  online: {
+    tag: 'Online', name: 'Multiplayer', art: 'MP', grad: 'linear-gradient(135deg, #22c38e 0%, #1f6dff 100%)',
+    desc: 'Free-for-all with friends · up to 8 players',
+  },
 };
 const DIFFS = [['easy', 'Easy', '4 bots'], ['normal', 'Normal', '6 bots'], ['hard', 'Hard', '8 bots']];
 
@@ -126,6 +144,11 @@ function modeCardHTML(id, extra = '') {
       <div class="mode-name">${m.name}</div>
       <div class="mode-desc">${m.desc}</div>
     </div>`;
+}
+
+// Same rules as the server: letters, numbers, spaces and _ - . ! ? — max 16.
+export function cleanName(raw) {
+  return String(raw ?? '').replace(/[^\w \-.!?]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 }
 
 const bars = (stats) => stats.map(([name, v]) =>
@@ -149,6 +172,8 @@ export class Menu {
       resume: onResume,
       quit: onQuit,
       'tab-main': () => this.show('main'),
+      'edit-name': () => this.openNamePrompt(),
+      'skip-name': () => this.finishName(''),
       'open-modes': () => this.show('modes'),
       'tab-loadout': () => this.show('loadout'),
       'open-settings': () => this.openSettings(this.screen === 'loadout' ? 'loadout' : 'main'),
@@ -222,6 +247,20 @@ export class Menu {
       this.refreshBinds();
     });
 
+    this.root.querySelector('[data-name-form]').addEventListener('submit', (e) => {
+      e.preventDefault();
+      this.finishName(this.root.querySelector('[data-name-input]').value);
+    });
+
+    // Multiplayer name / server boxes save as you type (and picking them selects the mode).
+    root.addEventListener('input', (e) => {
+      if (e.target.matches('[data-mp-name]')) settings.playerName = e.target.value.slice(0, 16);
+      else if (e.target.matches('[data-mp-server]')) settings.serverUrl = e.target.value.trim();
+      else return;
+      if (settings.mode !== 'online') { settings.mode = 'online'; this.refreshModesSelection(); }
+      saveSettings();
+    });
+
     // Capture phase so a key/button pressed while rebinding never reaches the game.
     window.addEventListener('keydown', (e) => this.onKey(e), true);
     window.addEventListener('mousedown', (e) => {
@@ -272,11 +311,38 @@ export class Menu {
     this.setHint('');
     if (screen === 'settings') this.refreshSettings();
     if (screen === 'loadout') this.refreshLoadout();
-    if (screen === 'main') this.refreshChips();
+    if (screen === 'main') {
+      this.refreshChips();
+      this.refreshName();
+      // First launch: ask for a username.
+      if (!settings.playerName) this.openNamePrompt();
+    }
     if (screen === 'pause') {
       this.root.querySelector('[data-pause-note]').textContent =
         `${keyLabel(settings.keys.menu)} or click Resume to jump back in · Hold Esc to leave fullscreen`;
     }
+  }
+
+  // ---------- username ----------
+  openNamePrompt() {
+    const input = this.root.querySelector('[data-name-input]');
+    input.value = settings.playerName;
+    this.root.querySelector('[data-name-prompt]').classList.remove('hidden');
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+  }
+
+  // Blank / skipped = Player_ + 5 random digits.
+  finishName(raw) {
+    const name = cleanName(raw) || `Player_${Math.floor(10000 + Math.random() * 90000)}`;
+    settings.playerName = name;
+    saveSettings();
+    this.root.querySelector('[data-name-prompt]').classList.add('hidden');
+    this.refreshName();
+    if (this.screen === 'modes') this.refreshModes();
+  }
+
+  refreshName() {
+    this.root.querySelector('[data-name-chip]').textContent = settings.playerName || 'Set username';
   }
 
   openSettings(from) {
@@ -293,13 +359,28 @@ export class Menu {
     return slot === 'ability' ? ABILITIES[id].name : WEAPONS[id].name;
   }
 
+  // Update just the "selected" highlight without re-rendering (keeps focus in the text boxes).
+  refreshModesSelection() {
+    for (const pick of this.root.querySelectorAll('.mode-pick')) {
+      const id = pick.querySelector('[data-pick-mode]').dataset.pickMode;
+      pick.classList.toggle('selected', settings.mode === id);
+    }
+  }
+
   refreshModes() {
     this.root.querySelector('[data-modes]').innerHTML = Object.keys(MODES).map((id) => {
       const selected = settings.mode === id;
-      const diffs = id === 'arena'
+      let diffs = id === 'arena'
         ? `<div class="diff-row">${DIFFS.map(([d, label, count]) =>
           `<button type="button" class="diff${settings.difficulty === d ? ' on' : ''}" data-diff="${d}">${label}<small>${count}</small></button>`).join('')}</div>`
         : '';
+      if (id === 'online') {
+        const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+        diffs = `<div class="mp-fields">
+          <label>Name<input type="text" maxlength="16" placeholder="Bean" data-mp-name value="${esc(settings.playerName)}"></label>
+          <label>Server<input type="text" placeholder="localhost:8080" data-mp-server value="${esc(settings.serverUrl)}"></label>
+        </div>`;
+      }
       return `
         <div class="mode-pick${selected ? ' selected' : ''}">
           <button type="button" class="mode-card" data-pick-mode="${id}">${modeCardHTML(id, selected ? '<em class="badge">Selected</em>' : '')}</button>

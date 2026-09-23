@@ -1,0 +1,17 @@
+{
+  "name": "movement-shooter-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Authoritative multiplayer server for Movement Shooter. Runs the same game code as the browser (../src).",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

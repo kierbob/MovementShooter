@@ -37,6 +37,32 @@
 }
 .tab:hover { color: var(--text) !important; }
 .tab.active { color: var(--text) !important; border-bottom-color: var(--yellow) !important; }
+.name-chip {
+  margin-left: auto; padding: 4px 14px !important; border-radius: 999px; font-size: 20px !important; letter-spacing: 1px;
+  background: rgba(255,255,255,0.08) !important; border: 2px solid var(--line) !important;
+}
+.name-chip:hover { border-color: var(--yellow) !important; }
+.name-chip + .build { margin-left: 16px; }
+
+/* ---------- username prompt ---------- */
+.name-prompt {
+  position: absolute; inset: 0; z-index: 5; display: flex; align-items: center; justify-content: center;
+  background: rgba(4, 6, 24, 0.72); padding: 16px;
+}
+.name-box {
+  width: min(420px, 100%); background: var(--panel); border: 2px solid var(--line); border-radius: 12px;
+  padding: 22px 24px; display: flex; flex-direction: column; gap: 10px;
+}
+.name-box h2 { font-size: 44px; font-weight: 400; margin: 0; transform: skewX(-6deg); }
+.name-box p { margin: 0; font-family: system-ui, sans-serif; font-size: 13px; color: var(--muted); }
+.name-box input {
+  padding: 12px 14px; border-radius: 8px; border: 2px solid var(--line); background: rgba(0,0,0,0.35);
+  color: var(--text); font: 600 20px system-ui, sans-serif;
+}
+.name-box input:focus { outline: none; border-color: var(--yellow); }
+.name-hint { font-family: system-ui, sans-serif; font-size: 11px; color: var(--muted); }
+.name-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 6px; }
+
 .build { margin-left: auto; font-size: 18px; color: var(--muted); letter-spacing: 2px; }
 
 .mode-area {
@@ -67,6 +93,16 @@ button.mode-card:hover { transform: skewX(-3deg) translateY(-3px); }
 .mode-pick { display: flex; flex-direction: column; gap: 10px; }
 .mode-pick.selected .mode-card { border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow), 0 12px 40px rgba(0,0,0,0.45); }
 .diff-row { display: flex; gap: 8px; }
+.mp-fields { display: grid; grid-template-columns: 1fr 1.6fr; gap: 8px; }
+.mp-fields label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-family: system-ui, sans-serif; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted);
+}
+.mp-fields input {
+  padding: 8px 10px; border-radius: 8px; border: 2px solid var(--line); background: rgba(0,0,0,0.35);
+  color: var(--text); font: 600 14px system-ui, sans-serif; text-transform: none; letter-spacing: 0;
+}
+.mp-fields input:focus { outline: none; border-color: var(--yellow); }
 .diff {
   flex: 1; padding: 8px 0 !important; font-size: 24px !important; letter-spacing: 1px; border-radius: 8px;
   background: rgba(255,255,255,0.08) !important; border: 2px solid var(--line) !important; transform: skewX(-4deg);

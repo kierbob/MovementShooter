@@ -257,6 +257,8 @@ export class Combat {
 
   damageTarget(t, dmg, zone, point) {
     if (t.dead) return;
+    // Other online players: shots stop on them, but damage will be decided by the server (step 3).
+    if (t.kind === 'remote') { this.fx.push({ type: 'impact', pos: point, normal: { x: 0, y: 1, z: 0 } }); return; }
     t.hp -= dmg;
     const kill = t.hp <= 0;
     if (kill) { t.dead = true; t.hp = 0; t.respawnT = DUMMY_RESPAWN; }

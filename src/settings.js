@@ -17,6 +17,7 @@ export const ACTIONS = [
   { id: 'ability', label: 'Ability', def: 'KeyQ' },
   { id: 'menu', label: 'Open Menu', def: 'KeyL' },
   { id: 'respawn', label: 'Respawn', def: 'KeyK' },
+  { id: 'stats', label: 'Stats Panel', def: 'F4' },
 ];
 
 // 0.022° per mouse count at sensitivity 1.0 — same scale as CS2 / Apex / Source games,
@@ -32,7 +33,10 @@ function defaults() {
     loadout: { ...DEFAULT_LOADOUT },
     lighting: 'pastel',   // key of LIGHTING in render.js
     quality: 'balanced',  // key of QUALITY in render.js
-    mode: 'dev',          // 'dev' | 'arena'
+    statsPanel: 'compact', // 'full' | 'compact' | 'off' (toggle in game with F4)
+    mode: 'dev',          // 'dev' | 'arena' | 'online'
+    playerName: '',
+    serverUrl: 'localhost:8080',
     difficulty: 'normal', // bot arena: 'easy' | 'normal' | 'hard'
   };
 }
@@ -48,9 +52,12 @@ function load() {
     }
     if (typeof saved?.sensitivity === 'number') s.sensitivity = saved.sensitivity;
     if (typeof saved?.volume === 'number') s.volume = saved.volume;
-    if (['dev', 'arena'].includes(saved?.mode)) s.mode = saved.mode;
+    if (['dev', 'arena', 'online'].includes(saved?.mode)) s.mode = saved.mode;
+    if (typeof saved?.playerName === 'string') s.playerName = saved.playerName.slice(0, 16);
+    if (typeof saved?.serverUrl === 'string' && saved.serverUrl) s.serverUrl = saved.serverUrl;
     if (typeof saved?.lighting === 'string') s.lighting = saved.lighting;
     if (['high', 'balanced', 'performance'].includes(saved?.quality)) s.quality = saved.quality;
+    if (['full', 'compact', 'off'].includes(saved?.statsPanel)) s.statsPanel = saved.statsPanel;
     if (['easy', 'normal', 'hard'].includes(saved?.difficulty)) s.difficulty = saved.difficulty;
     const lo = saved?.loadout;
     if (WEAPONS[lo?.primary]?.slot === 'primary') s.loadout.primary = lo.primary;
@@ -61,6 +68,12 @@ function load() {
 }
 
 export const settings = load();
+
+// Join links: ?server=abc.trycloudflare.com opens straight into Multiplayer on that server.
+try {
+  const server = new URLSearchParams(location.search).get('server');
+  if (server) { settings.serverUrl = server; settings.mode = 'online'; }
+} catch { /* not in a browser */ }
 
 export function saveSettings() {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(settings)); } catch { /* ignore */ }

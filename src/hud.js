@@ -16,6 +16,7 @@ const TEMPLATE = `
 <div class="health" data-health><div class="hp-num" data-hp-num></div><div class="hp-bar"><div data-hp-fill></div></div></div>
 <div class="arena-score" data-arena><span data-arena-k>0</span><small> KILLS</small><b>·</b><span data-arena-d>0</span><small> DEATHS</small></div>
 <div class="killfeed" data-feed></div>
+<div class="online-status" data-online></div>
 <div class="death" data-death><div class="death-word">SPLATTED!</div><div class="death-sub" data-death-sub></div></div>
 <div class="ability" data-ability>
   <div class="ability-icon"><div class="ability-cd" data-ability-cd></div><span data-ability-key></span></div>
@@ -215,6 +216,12 @@ export class HUD {
     }
     this.el.death.classList.toggle('show', player.dead);
     if (player.dead) this.el.deathSub.textContent = `Respawning in ${Math.max(0, respawnIn).toFixed(1)}`;
+  }
+
+  updateOnline(players, ping) {
+    const el = this.root.querySelector('[data-online]');
+    const text = `ONLINE · ${players} PLAYER${players === 1 ? '' : 'S'} · ${Math.round(ping)} MS`;
+    if (el.textContent !== text) el.textContent = text;
   }
 
   updateArena(stats) {

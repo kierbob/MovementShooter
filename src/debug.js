@@ -1,6 +1,6 @@
 import { TICK_RATE, MOVE, WALL } from './config.js';
 import { horizontalSpeed } from './player.js';
-import { keyLabel } from './settings.js';
+import { keyLabel, settings } from './settings.js';
 const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
 
 // Top-left stats panel. Tracks frame timing itself; everything else is read from game state.
@@ -35,12 +35,26 @@ export class DebugPanel {
     }
   }
 
-  draw(player, input, combat, prof, info) {
+  // 'full' | 'compact' | 'off' — cycled with the Stats Panel key (F4 by default).
+  setMode(mode) {
+    this.mode = mode;
+    this.el.style.display = mode === 'off' ? 'none' : '';
+    this.el.classList.toggle('compact', mode === 'compact');
+    this._lastDraw = 0;
+  }
+
+  draw(player, input, combat, prof, info, ping = null) {
     const speed = horizontalSpeed(player);
     this.topSpeed = Math.max(this.topSpeed, speed);
     const now = performance.now();
-    if (now - this._lastDraw < 50) return; // redraw at 20 Hz so the numbers are readable
+    if (this.mode === 'off' || now - this._lastDraw < 50) return; // redraw at 20 Hz so the numbers are readable
     this._lastDraw = now;
+
+    if (this.mode === 'compact') {
+      const pingText = ping == null ? '' : `  ·  ${Math.round(ping)} ms ping`;
+      this.el.textContent = `${this.fps.toFixed(0)} FPS  ·  ${this.frameMs.toFixed(1)} ms${pingText}  ·  ${keyLabel(settings.keys.stats)} for stats`;
+      return;
+    }
 
     const p = player.pos, v = player.vel;
     const keys = [...input.held].map(keyLabel).join(' ') || '—';

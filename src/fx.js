@@ -239,10 +239,13 @@ export class FX {
   }
 
   makeTargetView(t) {
-    const bot = t.kind === 'bot';
+    const remote = t.kind === 'remote';            // another player online
+    const bot = t.kind === 'bot' || remote;         // anything that carries a gun
     const g = new THREE.Group();
-    const bodyMat = new THREE.MeshToonMaterial({ color: bot ? 0x9a6bff : 0xff8a3d, gradientMap: toonGradient() });
-    const headMat = new THREE.MeshToonMaterial({ color: bot ? 0xc6a8ff : 0xffb35c, gradientMap: toonGradient() });
+    const body = remote ? new THREE.Color(t.color ?? 0x4fc3ff) : new THREE.Color(bot ? 0x9a6bff : 0xff8a3d);
+    const head = remote ? body.clone().lerp(new THREE.Color(0xffffff), 0.3) : new THREE.Color(bot ? 0xc6a8ff : 0xffb35c);
+    const bodyMat = new THREE.MeshToonMaterial({ color: body, gradientMap: toonGradient() });
+    const headMat = new THREE.MeshToonMaterial({ color: head, gradientMap: toonGradient() });
     DUMMY_PARTS.forEach((part, i) => {
       const pos = [(part.a[0] + part.b[0]) / 2, (part.a[1] + part.b[1]) / 2, (part.a[2] + part.b[2]) / 2];
       const m = new THREE.Mesh(this.partGeo[i], part.zone === 'head' ? headMat : bodyMat);
@@ -259,8 +262,8 @@ export class FX {
     }
     let botGun = null;
     if (bot) {
-      // Angry brows + a chunky toy blaster in the right hand.
-      for (const s of [-1, 1]) {
+      // Angry brows (bots only) + a chunky toy blaster floating at the side.
+      for (const s of remote ? [] : [-1, 1]) {
         const brow = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.022, 0.02), this.eyeMat);
         brow.position.set(s * 0.075, 1.84, 0.19);
         brow.rotation.z = s * -0.45;
@@ -282,8 +285,38 @@ export class FX {
     fill.position.z = 0.001;
     bar.add(bg, fill);
     g.add(bar);
+    // Online players get a floating name tag instead of a health bar (for now).
+    let tag = null;
+    if (remote) {
+      bar.visible = false;
+      tag = this.nameTag(t.name ?? 'Bean', t.color ?? 0x4fc3ff);
+      tag.position.y = 2.3;
+      g.add(tag);
+    }
     this.scene.add(g);
-    return { g, bodyMat, headMat, fill, bar, flash: 0, gun: bot ? botGun : null, realGun: false };
+    return { g, bodyMat, headMat, fill, bar, tag, flash: 0, gun: bot ? botGun : null, realGun: false };
+  }
+
+  nameTag(name, color) {
+    const c = document.createElement('canvas');
+    c.width = 512; c.height = 128;
+    const draw = () => {
+      const g = c.getContext('2d');
+      g.clearRect(0, 0, 512, 128);
+      g.font = "64px Bangers, 'Bebas Neue', sans-serif";
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round';
+      g.lineWidth = 12; g.strokeStyle = '#15151f'; g.strokeText(name, 256, 64);
+      g.fillStyle = '#' + new THREE.Color(color).lerp(new THREE.Color(0xffffff), 0.45).getHexString();
+      g.fillText(name, 256, 64);
+      tex.needsUpdate = true;
+    };
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    draw();
+    document.fonts?.ready.then(draw);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    s.scale.set(2.4, 0.6, 1);
+    return s;
   }
 
   // The gun bots carry. Loaded once, cloned into each bot's hand.
@@ -784,6 +817,11 @@ export class FX {
       if (t.kind === 'bot') view.bar.rotation.y = Math.atan2(this.camera.position.x - t.pos.x, this.camera.position.z - t.pos.z) - t.yaw;
       view.g.position.set(t.pos.x, t.pos.y, t.pos.z);
       view.g.rotation.y = t.yaw; // faces you; the hitboxes turn the same way
+      // Online players squash down when crouching/sliding (no limbs, so this is the "animation").
+      if (t.kind === 'remote') {
+        const sy = t.low ? 0.62 : 1;
+        view.g.scale.y += (sy - view.g.scale.y) * Math.min(1, dt * 14);
+      }
       const frac = t.hp / t.maxHp;
       view.fill.scale.x = Math.max(0.001, frac);
       view.fill.position.x = -0.4 * (1 - frac);

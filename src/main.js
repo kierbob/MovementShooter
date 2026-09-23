@@ -8,10 +8,11 @@ import { Menu } from './menu.js';
 import { Combat } from './combat.js';
 import { FX } from './fx.js';
 import { HUD } from './hud.js';
-import { settings } from './settings.js';
+import { settings, saveSettings } from './settings.js';
 import { Sound } from './sound.js';
 import { TimeTrial } from './trial.js';
 import { Bots } from './bots.js';
+import { Net } from './net.js';
 import { ARENA } from './world.js';
 import { TrialView } from './trialview.js';
 
@@ -132,6 +133,62 @@ function resetHealth(invuln = 0) {
   player.invuln = invuln;
 }
 
+// ---------- multiplayer ----------
+const net = new Net();
+const online = { active: false, remotes: new Map() }; // remote player id -> combat target
+
+function stopOnline() {
+  online.active = false;
+  net.close();
+  for (const t of online.remotes.values()) combat.removeTarget(t);
+  online.remotes.clear();
+}
+
+net.onDisconnect = () => {
+  if (!online.active) return;
+  quitToMenu();
+  menu.setHint('Disconnected from the server.');
+};
+
+// Keep one combat target per remote player, drawn at its smoothed (interpolated) position.
+function syncRemotes() {
+  const seen = new Set();
+  for (const r of net.remotes.values()) {
+    const s = net.sample(r);
+    if (!s) continue;
+    seen.add(r.id);
+    let t = online.remotes.get(r.id);
+    if (!t) {
+      t = combat.addTarget({ kind: 'remote', name: r.name, color: r.color, pos: { x: s.x, y: s.y, z: s.z } });
+      online.remotes.set(r.id, t);
+    }
+    t.pos = { x: s.x, y: s.y, z: s.z };
+    t.yaw = s.yaw + Math.PI; // bean models face +Z; camera yaw 0 looks down -Z
+    t.low = !!(s.cr || s.sl);
+  }
+  for (const [id, t] of online.remotes) {
+    if (!seen.has(id)) { combat.removeTarget(t); online.remotes.delete(id); }
+  }
+}
+
+async function startOnline() {
+  // Grab the mouse first (browsers only allow that straight after a click), then connect.
+  captureMouse();
+  menu.setHint('Connecting…');
+  try {
+    const welcome = await net.connect(settings.serverUrl, settings.playerName || 'Bean');
+    online.active = true;
+    document.body.dataset.mode = 'online';
+    placePlayer(welcome.spawn);
+    resetHealth();
+    menu.setHint('');
+  } catch (err) {
+    stopOnline();
+    quitToMenu();
+    menu.setHint(`${err.message}. Is the server running? (start-server.bat)`);
+  }
+}
+
 function startGame() {
   player.events.length = 0;
   debug.topSpeed = 0;
@@ -143,6 +200,14 @@ function startGame() {
   arena.active = settings.mode === 'arena';
   arena.kills = arena.deaths = 0;
   document.body.dataset.mode = settings.mode;
+  stopOnline();
+  if (settings.mode === 'online') {
+    placePlayer(SPAWN); // parked in the hub until the server says where we spawn
+    resetHealth();
+    updateGunsMode();
+    startOnline();
+    return;
+  }
   if (arena.active) {
     bots.start(settings.difficulty, player);
     placePlayer(bots.farSpawn(ARENA.center));
@@ -159,6 +224,7 @@ function quitToMenu() {
   setState('menu');
   bots.stop();
   arena.active = false;
+  stopOnline();
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -225,6 +291,17 @@ input.onLockChange = (locked) => {
   else if (!locked && state === 'playing') setState('paused');
 };
 
+// Stats panel: full → compact → off (F4 by default). Works in game and in menus.
+debug.setMode(settings.statsPanel);
+window.addEventListener('keydown', (e) => {
+  if (e.code !== settings.keys.stats || e.repeat || menu.listening) return;
+  e.preventDefault();
+  const order = ['full', 'compact', 'off'];
+  settings.statsPanel = order[(order.indexOf(settings.statsPanel) + 1) % order.length];
+  saveSettings();
+  debug.setMode(settings.statsPanel);
+});
+
 // The Open Menu key also resumes from the pause menu.
 window.addEventListener('keydown', (e) => {
   if (state === 'paused' && menu.screen === 'pause' && e.code === settings.keys.menu && !e.repeat) captureMouse();
@@ -288,7 +365,17 @@ function frame(now) {
       if (player.dead) cmd = { ...DEAD_CMD, yaw: cmd.yaw, pitch: cmd.pitch }; // no moving or shooting while splatted
       combat.tick(player, cmd, TICK_DT); // before movement so knockback applies this tick
       if (!player.dead) stepPlayer(player, cmd, BOXES, TICK_DT);
-      if (arena.active) {
+      if (online.active) {
+        net.queueCmd(cmd);
+        // Step 1 correction: if we've drifted far from where the server has us, snap back.
+        // (Step 2 replaces this with proper replay-based reconciliation.)
+        const s = net.self;
+        if (s && Math.hypot(s.x - player.pos.x, s.y - player.pos.y, s.z - player.pos.z) > 3) {
+          player.pos = { x: s.x, y: s.y, z: s.z };
+          player.vel = { x: s.vx, y: s.vy, z: s.vz };
+          prevPos = { ...player.pos };
+        }
+      } else if (arena.active) {
         bots.tick(player, TICK_DT);
         arenaTick(TICK_DT);
       } else {
@@ -333,6 +420,10 @@ function frame(now) {
   }
   camera.updateMatrixWorld();
 
+  if (online.active) {
+    net.flush();
+    syncRemotes();
+  }
   prof.mark('sim', tFrame);
   let t0 = performance.now();
   const events = combat.fx.splice(0);
@@ -368,8 +459,9 @@ function frame(now) {
       hud.updatePlayer(dt, player, input.yaw, arena.respawnT);
       hud.updateArena(arena);
     }
+    if (online.active) hud.updateOnline(net.remotes.size + 1, net.ping);
     prof.mark('hud', t0);
-    debug.draw(player, input, combat, prof, renderer.info.render);
+    debug.draw(player, input, combat, prof, renderer.info.render, online.active ? net.ping : null);
   }
   debug.frame(dtMs, ticks);
   requestAnimationFrame(frame);
@@ -378,7 +470,7 @@ requestAnimationFrame(frame);
 
 // Handy for poking at things from the dev console. forceState skips mouse capture (for testing).
 window.game = {
-  player, input, menu, combat, fx, hud, sound, trial, bots, arena, setLighting, prof, renderer,
+  player, input, menu, combat, fx, hud, sound, trial, bots, arena, setLighting, prof, renderer, net, online,
   // Render one frame right now and return it as a JPEG data URL (for lighting comparisons).
   snapshot: (w = 480, h = 270) => {
     updateSky(camera);

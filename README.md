@@ -15,6 +15,20 @@ http://localhost:5173. Keep the window open while you play.
 (Python 3 is required for the local server. The game itself loads three.js from a CDN, so you
 need an internet connection the first time.)
 
+## Multiplayer (work in progress)
+
+1. Install [Node.js](https://nodejs.org) (LTS) on the PC that hosts.
+2. Double-click `start-server.bat` (first run installs the one dependency). The server listens on
+   port **8080**.
+3. Start the game (`start.bat`), click the mode card → **Multiplayer**, set your name, and set the
+   server to `localhost:8080` (or `<host PC's LAN IP>:8080` for friends on the same Wi-Fi).
+4. Press Play.
+
+Join links: `…/index.html?server=your-server-address` opens straight into Multiplayer.
+
+Current state: you can see each other moving (server-authoritative movement). Shooting each other,
+prediction/smoothing under lag, and online hosting are the next steps.
+
 ## Modes
 
 - **Dev Server**: movement sandbox with bean dummies, jump pads, and **time trial** portals
@@ -36,6 +50,7 @@ need an internet connection the first time.)
 | Ability | Q |
 | Menu | Esc or L |
 | Respawn / restart trial | K |
+| Stats panel (full / compact / off) | F4 |
 
 ## Project layout
 
