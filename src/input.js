@@ -122,16 +122,33 @@ export class Input {
     this.unconsumed.push(t);
   }
 
+  isSpike(dx, dy) {
+    const f = (this.flow ??= { x: 0, y: 0, ax: 8, ay: 8, t: 0 });
+    const now = performance.now();
+    if (now - f.t > 150) { f.x = f.y = 0; } // mouse was still: no direction to compare against
+    f.t = now;
+    const axis = (d, v, a) => {
+      const big = Math.abs(d) > Math.max(40, a * 5);
+      const reversed = Math.sign(d) !== Math.sign(v) && Math.abs(v) > 3;
+      return (big && reversed) || Math.abs(d) > Math.max(300, a * 12);
+    };
+    // Chrome's bogus jump is a single event: never drop two in a row, so a real, sudden change of
+    // direction can't get stuck being ignored.
+    const spike = !f.dropped && (axis(dx, f.x, f.ax) || axis(dy, f.y, f.ay));
+    f.dropped = spike;
+    if (!spike) {
+      f.x = f.x * 0.7 + dx * 0.3; f.y = f.y * 0.7 + dy * 0.3;           // recent direction
+      f.ax = f.ax * 0.9 + Math.abs(dx) * 0.1; f.ay = f.ay * 0.9 + Math.abs(dy) * 0.1; // recent size
+    }
+    return spike;
+  }
+
   onMouse(e) {
     if (!this.locked || !this.enabled) return;
-    // Without raw input, Chrome on Windows sometimes reports one bogus, huge movement (the camera
-    // "snaps"). Drop any single event far bigger than the recent ones.
-    const mag = Math.abs(e.movementX) + Math.abs(e.movementY);
-    if (!this.rawMouse) {
-      const typical = this.typicalMove ?? 20;
-      if (mag > 300 && mag > typical * 10) return;
-      this.typicalMove = typical * 0.9 + mag * 0.1;
-    }
+    // Without raw input, Chrome on Windows sometimes reports the hidden cursor being re-centered
+    // as real movement: one big jump, usually AGAINST the way you're moving (the camera "snaps").
+    // Drop events that are way bigger than recent ones, or big and reversed on an axis.
+    if (!this.rawMouse && this.isSpike(e.movementX, e.movementY)) return;
     const sens = radiansPerCount();
     this.yaw -= e.movementX * sens;
     this.pitch -= e.movementY * sens;
