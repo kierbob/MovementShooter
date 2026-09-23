@@ -48,6 +48,13 @@ export const WEAPONS = {
       explode: { radius: 4.5, damage: 85, knockback: 13 },
     },
   },
+  sniper: {
+    id: 'sniper', slot: 'primary', name: 'Long Shot',
+    desc: 'Two heavy rounds. Headshots kill, and each shot shoves you back hard.',
+    type: 'hitscan', auto: false, damage: 75, headMult: 2, pellets: 1, spread: 0,
+    fireRate: 1.25, mag: 2, reload: 1.8, range: 400, knockback: 13, kick: 1.2, crosshair: 'scope',
+    fx: { star: 0.36, lines: true, words: ['KRAK!', 'BOOM!', 'KA-CHOW!'], wordChance: 1, shell: 0xe0b03a },
+  },
   pistol: {
     id: 'pistol', slot: 'secondary', name: 'Sidearm',
     desc: 'Reliable semi-auto. Rewards headshots.',
@@ -68,6 +75,13 @@ export const WEAPONS = {
     type: 'hitscan', auto: false, damage: 30, headMult: 1.5, pellets: 1, spread: 0.2,
     fireRate: 2.5, mag: 6, reload: 1.3, range: 120, knockback: 6.5, kick: 0.8, crosshair: 'bracket',
     fx: { star: 0.3, lines: true, words: ['KA-POW!', 'BLAM!'], wordChance: 0.8, shell: 0xffc23d },
+  },
+  deagle: {
+    id: 'deagle', slot: 'secondary', name: 'Deagle',
+    desc: 'No push, all punch. One tap to the head.',
+    type: 'hitscan', auto: false, damage: 50, headMult: 2, pellets: 1, spread: 0.1,
+    fireRate: 2.8, mag: 7, reload: 1.4, range: 180, knockback: 0, kick: 0.9, crosshair: 'dot',
+    fx: { star: 0.28, lines: true, words: ['BANG!', 'KA-BLAM!'], wordChance: 0.7, shell: 0xffc23d },
   },
 };
 

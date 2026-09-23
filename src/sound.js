@@ -172,6 +172,18 @@ const SYNTH = {
     v.tone('sine', 115, 35, 0.3, 1);
     v.tone('triangle', 280, 900, 0.16, 0.14, { delay: 0.04, vibrato: { rate: 30, depth: 60 } }); // boing tail
   },
+  sniper: (v) => {
+    v.noise(0.45, 1, 6000, 180);
+    v.tone('sine', 130, 30, 0.4, 1);
+    v.tone('square', 1800, 300, 0.06, 0.2); // crack
+    v.noise(0.05, 0.3, 2000, 2000, { type: 'bandpass', q: 2, delay: 0.45 }); // bolt
+    v.noise(0.05, 0.3, 2600, 2600, { type: 'bandpass', q: 2, delay: 0.55 });
+  },
+  deagle: (v) => {
+    v.noise(0.22, 0.85, 3600, 300);
+    v.tone('sine', 140, 40, 0.22, 0.8);
+    v.tone('square', 700, 160, 0.07, 0.2);
+  },
   rocket: (v) => {
     v.noise(0.5, 0.5, 500, 2600, { type: 'bandpass', q: 1.4 });
     v.tone('sawtooth', 80, 210, 0.4, 0.12);

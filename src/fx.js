@@ -145,6 +145,18 @@ function makeGun(id) {
       box(0.055, 0.14, 0.07, 0, -0.09, 0.03, 0x241a14).rotation.x = -0.2;
       g.userData.muzzle = new THREE.Vector3(0, 0.005, -0.25);
       break;
+    case 'sniper':
+      box(0.07, 0.1, 0.5, 0, 0, -0.05, 0xd9a032);
+      cyl(0.018, 0.45, 0, 0.02, -0.52, 0x2c2c2c);
+      cyl(0.035, 0.22, 0, 0.1, -0.08, 0x2c2c2c);
+      box(0.045, 0.13, 0.06, 0, -0.1, 0.05, 0x2c2c2c).rotation.x = -0.2;
+      g.userData.muzzle = new THREE.Vector3(0, 0.02, -0.76);
+      break;
+    case 'deagle':
+      box(0.065, 0.09, 0.26, 0, 0, -0.07, 0xe89a2e);
+      box(0.055, 0.14, 0.07, 0, -0.09, 0.03, 0x3a3a44).rotation.x = -0.2;
+      g.userData.muzzle = new THREE.Vector3(0, 0.01, -0.22);
+      break;
   }
   return g;
 }

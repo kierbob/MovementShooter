@@ -15,6 +15,8 @@ export const VIEWMODELS = {
   pistol: { file: 'sidearm.glb', length: 0.34, flip: false, offset: [0, 0, 0] },
   smg: { file: 'buzzsmg.glb', length: 0.5, flip: false, offset: [0, 0, 0] },
   kickpistol: { file: 'kickpistol.glb', length: 0.4, flip: false, offset: [0, 0, 0] },
+  sniper: { file: 'sniper.glb', length: 0.8, flip: false, offset: [0, 0, 0] },
+  deagle: { file: 'deagle.glb', length: 0.36, flip: false, offset: [0, 0, 0] },
 };
 
 const loader = new GLTFLoader();

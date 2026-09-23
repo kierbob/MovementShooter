@@ -49,6 +49,10 @@ const CROSSHAIRS = {
     const r = 13 + bloom * 5;
     return `<circle r="${r}"/>${dot(2)}` + ln(-7, r + 9, 7, r + 9) + ln(-4, r + 17, 4, r + 17);
   },
+  scope: ({ bloom }) => {
+    const r = 16 + bloom * 6, g = 4;
+    return `<circle r="${r}"/>${dot(1.8)}` + ln(0, -g, 0, -r - 6) + ln(0, g, 0, r + 6) + ln(-g, 0, -r - 6, 0) + ln(g, 0, r + 6, 0);
+  },
   bracket: ({ bloom }) => {
     const g = 12 + bloom * 9, h = 9;
     return `<polyline points="${-g + 5},${-h} ${-g},${-h} ${-g},${h} ${-g + 5},${h}"/>` +
