@@ -51,7 +51,8 @@ Build with boxes, jump pads and spawns, press **Test Play** to run around the ma
 **Export** to download it as a `.json` file. Press **Help** in the editor for controls.
 
 Built-in maps live in `maps/` and open with `editor.html?map=<name>`, e.g.
-`editor.html?map=bean-street` (two houses across a street, made by `tools/gen_bean_street.py`).
+`editor.html?map=bean-street` (two houses across a street, made by `tools/gen_bean_street.py`;
+`node tools/check_bean_street.mjs` runs its movement routes through the real movement code).
 
 ## Modes
 

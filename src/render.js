@@ -63,6 +63,46 @@ export function boxGeometry(w, h, d) {
   return geo;
 }
 
+// Wedge for a ramp, centered like boxGeometry. ramp = { axis, dir } (see world.js).
+// Same attributes/index layout as boxGeometry so the two can be merged into one mesh.
+export function rampGeometry(w, h, d, ramp) {
+  const half = { x: w / 2, y: h / 2, z: d / 2 };
+  const axis = ramp.axis, other = axis === 'x' ? 'z' : 'x';
+  const lo = -ramp.dir * half[axis], hi = ramp.dir * half[axis];
+  const o0 = -half[other], o1 = half[other], y0 = -half.y, y1 = half.y;
+  const P = (a, o, y) => { const q = { y }; q[axis] = a; q[other] = o; return new THREE.Vector3(q.x, q.y, q.z); };
+  const faces = [
+    [P(lo, o0, y0), P(hi, o0, y0), P(hi, o1, y0), P(lo, o1, y0)], // bottom
+    [P(hi, o0, y0), P(hi, o1, y0), P(hi, o1, y1), P(hi, o0, y1)], // tall end
+    [P(lo, o0, y0), P(lo, o1, y0), P(hi, o1, y1), P(hi, o0, y1)], // slope
+    [P(lo, o0, y0), P(hi, o0, y0), P(hi, o0, y1)],                // sides
+    [P(lo, o1, y0), P(hi, o1, y0), P(hi, o1, y1)],
+  ];
+  const pos = [], nor = [], uv = [], idx = [];
+  const e1 = new THREE.Vector3(), e2 = new THREE.Vector3(), n = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let f of faces) {
+    n.subVectors(f[1], f[0]).cross(e1.subVectors(f[2], f[0])).normalize();
+    c.set(0, 0, 0); f.forEach((q) => c.add(q)); c.divideScalar(f.length);
+    if (n.dot(c) < 0) { f = [...f].reverse(); n.negate(); } // make it face outward
+    e1.subVectors(f[1], f[0]).normalize();
+    e2.crossVectors(n, e1);
+    const base = pos.length / 3;
+    for (const q of f) {
+      pos.push(q.x, q.y, q.z);
+      nor.push(n.x, n.y, n.z);
+      const r = q.clone().sub(f[0]);
+      uv.push(r.dot(e1) / 4, r.dot(e2) / 4); // 1 m grid cells, like the boxes
+    }
+    for (let i = 1; i < f.length - 1; i++) idx.push(base, base + i, base + i + 1);
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx);
+  return geo;
+}
+
 // Lighting presets. sky = [top, bottom] gradient; sunDir = where the sun sits relative to you
 // (low y = long shadows); hemi = ambient sky/ground light; exposure = overall brightness.
 // cloud = cartoon cloud tint; sunDisc = color of the sun glow in the sky.
@@ -229,7 +269,7 @@ export function createRenderer(boxes) {
   const byKind = {};
   for (const b of boxes) {
     const w = b.max.x - b.min.x, h = b.max.y - b.min.y, d = b.max.z - b.min.z;
-    const geo = boxGeometry(w, h, d);
+    const geo = b.ramp ? rampGeometry(w, h, d, b.ramp) : boxGeometry(w, h, d);
     geo.translate((b.min.x + b.max.x) / 2, (b.min.y + b.max.y) / 2, (b.min.z + b.max.z) / 2);
     (byKind[b.kind] ??= []).push(geo);
   }

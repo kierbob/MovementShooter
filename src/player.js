@@ -1,6 +1,6 @@
 // Movement simulation. No three.js here — pure data + math so a server can run it too.
 import { PLAYER, MOVE, SLIDE, AIR, JUMP_PAD, WALL } from './config.js';
-import { overlaps, PADS } from './world.js';
+import { overlaps, solidFor, rampSlope, PADS } from './world.js';
 
 export function createPlayer(spawn) {
   return {
@@ -112,7 +112,7 @@ function findWall(p, boxes) {
     if (nz < 0) probe.min.z = p.pos.z + hw;
     if (nx !== 0) { probe.min.z += 0.05; probe.max.z -= 0.05; }
     if (nz !== 0) { probe.min.x += 0.05; probe.max.x -= 0.05; }
-    if (!boxes.some((b) => overlapsLoose(probe, b))) continue;
+    if (!boxes.some((b) => overlapsLoose(probe, solidFor(b, probe)))) continue;
     const score = -(p.vel.x * nx + p.vel.z * nz); // prefer the wall we're moving into
     if (score > bestScore) { bestScore = score; best = { x: nx, z: nz }; }
   }
@@ -204,7 +204,36 @@ function aabb(p) {
 
 function blocked(p, boxes) {
   const a = aabb(p);
-  return boxes.some((b) => overlaps(a, b));
+  return boxes.some((b) => overlaps(a, solidFor(b, a)));
+}
+
+// The ramp we're standing on, if any.
+function rampUnder(p, boxes) {
+  const a = aabb(p);
+  a.min.y -= 0.06;
+  for (const b of boxes) {
+    if (!b.ramp) continue;
+    const s = solidFor(b, a);
+    if (overlaps(a, s) && Math.abs(s.max.y - p.pos.y) < 0.06) return b;
+  }
+  return null;
+}
+
+// After walking down a ramp (or off its bottom), put our feet back on the ground if it's
+// only a little below — otherwise every downhill step would be a tiny fall.
+function snapDown(p, boxes, maxDrop) {
+  const a = aabb(p);
+  a.min.y -= maxDrop;
+  let top = -Infinity;
+  for (const b of boxes) {
+    const s = solidFor(b, a);
+    if (!overlaps(a, s)) continue;
+    if (s.max.y > p.pos.y + 1e-6) return false; // something at our feet level: not a clean drop
+    top = Math.max(top, s.max.y);
+  }
+  if (top === -Infinity) return false;
+  p.pos.y = top;
+  return true;
 }
 
 // Quake-style acceleration toward wishDir, but input alone can never raise total
@@ -302,8 +331,10 @@ function moveAxis(p, axis, delta, boxes) {
   p.pos[axis] += delta;
   let hit = null;
   const hw = PLAYER.halfWidth;
-  for (const b of boxes) {
-    if (!overlaps(aabb(p), b)) continue;
+  for (const box of boxes) {
+    const a = aabb(p);
+    const b = solidFor(box, a);
+    if (!overlaps(a, b)) continue;
     hit = b;
     if (axis === 'y') {
       p.pos.y = delta < 0 ? b.max.y : b.min.y - p.height;
@@ -353,6 +384,19 @@ export function stepPlayer(p, cmd, boxes, dt) {
   p.landGrace = Math.max(0, p.landGrace - dt);
   p.padCooldown = Math.max(0, p.padCooldown - dt);
 
+  // Ramps: sliding downhill speeds you up; running uphill carries you up and off the top.
+  const ramp = p.grounded ? rampUnder(p, boxes) : null;
+  let rampVy = 0;
+  if (ramp) {
+    const s = rampSlope(ramp);
+    const up = { x: 0, z: 0 };
+    up[ramp.ramp.axis] = ramp.ramp.dir;
+    rampVy = Math.max(0, p.vel.x * up.x + p.vel.z * up.z) * s;
+    p.rampDown = { x: -up.x, z: -up.z, a: (MOVE.gravity * s) / Math.hypot(1, s) };
+  } else {
+    p.rampDown = null;
+  }
+
   // Slide (hold slide key) and crouch (hold crouch key) are separate.
   if (p.grounded && cmd.slidePressed && !p.sliding) startSlide(p, 'slide');
   if (p.sliding && !cmd.slide) { p.sliding = false; logEvent(p, 'slide cancel'); }
@@ -362,6 +406,10 @@ export function stepPlayer(p, cmd, boxes, dt) {
   if (p.grounded) {
     if (p.sliding) {
       setHorizontalSpeed(p, Math.max(0, horizontalSpeed(p) - SLIDE.friction * dt));
+      if (p.rampDown) { // gravity pulls you down the slope
+        p.vel.x += p.rampDown.x * p.rampDown.a * dt;
+        p.vel.z += p.rampDown.z * p.rampDown.a * dt;
+      }
       if (len > 0) steer(p.vel, wishDir, SLIDE.steerRate * dt);
     } else {
       // Sprint only counts when moving forward-ish (not backpedaling or pure strafing).
@@ -394,7 +442,7 @@ export function stepPlayer(p, cmd, boxes, dt) {
   }
 
   if (p.jumpBuffer > 0 && p.coyote > 0) {
-    p.vel.y = MOVE.jumpVelocity;
+    p.vel.y = MOVE.jumpVelocity + rampVy; // jumping while running up a ramp goes higher
     p.grounded = false;
     p.coyote = 0;
     p.jumpBuffer = 0;
@@ -425,6 +473,17 @@ export function stepPlayer(p, cmd, boxes, dt) {
     if (moveAxis(p, 'y', vy * sdt, boxes)) {
       if (vy < 0) landed = true;
       p.vel.y = 0;
+    }
+  }
+
+  // Ramps: stick to the slope going down; fly off the top going up.
+  if (wasGrounded && !landed && p.vel.y <= 0) {
+    if (ramp && snapDown(p, boxes, horizontalSpeed(p) * dt * 1.5 + 0.05)) {
+      landed = true;
+      p.vel.y = 0;
+    } else if (rampVy > 0) {
+      p.vel.y = rampVy;
+      logEvent(p, 'ramp launch', `${rampVy.toFixed(1)} m/s up`);
     }
   }
 

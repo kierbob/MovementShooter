@@ -4,6 +4,7 @@
 import { WEAPONS, ABILITIES, DEFAULT_LOADOUT } from './items.js';
 import { PLAYER } from './config.js';
 import { applyImpulse, eyePosition } from './player.js';
+import { rampPlane } from './world.js';
 
 const SWITCH_TIME = 0.3;   // seconds to draw a weapon
 const SEMI_BUFFER = 0.12;  // a click this early before the gun is ready still fires
@@ -60,6 +61,24 @@ function rayBox(o, d, b, maxT) {
     if (t1 > tmin) { tmin = t1; axis = a; sign = s; }
     tmax = Math.min(tmax, t2);
     if (tmin > tmax) return null;
+  }
+  // Ramps: also clip against the sloped top (a half-space n·p <= c).
+  let planeN = null;
+  if (b.ramp) {
+    const { n, c } = rampPlane(b);
+    const denom = n.x * d.x + n.y * d.y + n.z * d.z;
+    const dist = c - (n.x * o.x + n.y * o.y + n.z * o.z);
+    if (Math.abs(denom) < 1e-9) {
+      if (dist < 0) return null;
+    } else {
+      const t = dist / denom;
+      if (denom < 0) { if (t > tmin) { tmin = t; planeN = n; } } else tmax = Math.min(tmax, t);
+      if (tmin > tmax) return null;
+    }
+  }
+  if (planeN) {
+    const l = Math.hypot(planeN.x, planeN.y, planeN.z);
+    return { t: tmin, normal: v(planeN.x / l, planeN.y / l, planeN.z / l) };
   }
   if (axis === null) return null;
   const normal = v(0, 0, 0);

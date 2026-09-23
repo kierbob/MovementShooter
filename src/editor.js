@@ -4,13 +4,15 @@
 // the game on the current map via index.html?testmap.
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { COLORS, gridTexture, boxGeometry } from './render.js';
+import { COLORS, gridTexture, boxGeometry, rampGeometry } from './render.js';
 import { toonGradient } from './particles.js';
 import { JUMP_PAD } from './config.js';
 
 const SAVE_KEY = 'movement-shooter.editor.v1';
 const TEST_KEY = 'movement-shooter.testmap';
 const GRID = 0.5;
+const RAMPS = { 'x+': { axis: 'x', dir: 1 }, 'x-': { axis: 'x', dir: -1 }, 'z+': { axis: 'z', dir: 1 }, 'z-': { axis: 'z', dir: -1 } };
+const RAMP_TURN = { 'x+': 'z+', 'z+': 'x-', 'x-': 'z-', 'z-': 'x+' }; // matches R's 90° turn
 const KINDS = [
   ['block', 'Block'], ['wall', 'Wall'], ['plat', 'Platform'], ['pillar', 'Pillar'],
   ['stair', 'Stair'], ['low', 'Low / Cover'], ['floor', 'Floor'], ['test', 'Yellow'],
@@ -46,7 +48,10 @@ function defaultMap() {
 function withIds(m) {
   return {
     name: String(m.name ?? 'Untitled').slice(0, 32),
-    boxes: (m.boxes ?? []).map((b) => ({ id: newId(), x: +b.x, z: +b.z, w: +b.w, d: +b.d, h: +b.h, y: +(b.y ?? 0), kind: b.kind ?? 'block' })),
+    boxes: (m.boxes ?? []).map((b) => ({
+      id: newId(), x: +b.x, z: +b.z, w: +b.w, d: +b.d, h: +b.h, y: +(b.y ?? 0), kind: b.kind ?? 'block',
+      ...(RAMPS[b.ramp] ? { ramp: b.ramp } : {}),
+    })),
     pads: (m.pads ?? []).map((p) => ({
       id: newId(), x: +p.x, y: +(p.y ?? 0), z: +p.z, radius: +(p.radius ?? 1.2),
       ...(p.launch != null ? { launch: +p.launch } : {}),
@@ -155,7 +160,8 @@ const views = new Map();
 const pickables = [];
 
 function makeBoxView(b) {
-  const mesh = new THREE.Mesh(boxGeometry(b.w, b.h, b.d), boxMat(b.kind, false));
+  const geo = b.ramp ? rampGeometry(b.w, b.h, b.d, RAMPS[b.ramp]) : boxGeometry(b.w, b.h, b.d);
+  const mesh = new THREE.Mesh(geo, boxMat(b.kind, false));
   const edges = new THREE.LineSegments(new THREE.EdgesGeometry(mesh.geometry), edgeMat);
   mesh.add(edges);
   mesh.userData.edges = edges;
@@ -210,7 +216,7 @@ function sync() {
   const seen = new Set();
   for (const [type, o] of allObjects()) {
     seen.add(o.id);
-    const key = type === 'box' ? `${o.w}|${o.h}|${o.d}` : type === 'pad' ? `${o.radius}|${o.dir ? `${o.dir.x},${o.dir.z}` : ''}` : 's';
+    const key = type === 'box' ? `${o.w}|${o.h}|${o.d}|${o.ramp ?? ''}` : type === 'pad' ? `${o.radius}|${o.dir ? `${o.dir.x},${o.dir.z}` : ''}` : 's';
     let v = views.get(o.id);
     if (v && v.key !== key) { scene.remove(v.obj); views.delete(o.id); v = null; }
     if (!v) {
@@ -255,8 +261,10 @@ function setGhost(obj) {
   }
 }
 function rebuildGhost() {
-  if (tool === 'box') {
-    const m = new THREE.Mesh(new THREE.BoxGeometry(newSize.w, newSize.h, newSize.d), ghostMat);
+  if (tool === 'box' || tool === 'ramp') {
+    const { w, d, ramp } = newShape();
+    const geo = ramp ? rampGeometry(w, newSize.h, d, RAMPS[ramp]) : new THREE.BoxGeometry(w, newSize.h, d);
+    const m = new THREE.Mesh(geo, ghostMat);
     m.add(new THREE.LineSegments(new THREE.EdgesGeometry(m.geometry), edgeSelMat));
     ghostMat.color.set(COLORS[newKind] ?? 0xffe135);
     setGhost(m);
@@ -270,6 +278,23 @@ function rebuildGhost() {
     setGhost(null);
   }
 }
+
+// New ramps rise away from the camera, with their long side along the slope.
+function rampFacing() {
+  const f = new THREE.Vector3();
+  camera.getWorldDirection(f);
+  return Math.abs(f.x) > Math.abs(f.z) ? (f.x > 0 ? 'x+' : 'x-') : (f.z > 0 ? 'z+' : 'z-');
+}
+function newShape() {
+  if (tool !== 'ramp') return { w: newSize.w, d: newSize.d, ramp: null };
+  const ramp = rampFacing();
+  const long = Math.max(newSize.w, newSize.d), short = Math.min(newSize.w, newSize.d);
+  return RAMPS[ramp].axis === 'x' ? { w: long, d: short, ramp } : { w: short, d: long, ramp };
+}
+let ghostFacing = '';
+controls.addEventListener('change', () => {
+  if (tool === 'ramp' && rampFacing() !== ghostFacing) { ghostFacing = rampFacing(); rebuildGhost(); }
+});
 
 function setTool(t) {
   tool = t;
@@ -304,8 +329,9 @@ function placement(e) {
   const n = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : new THREE.Vector3(0, 1, 0);
   if (hit.object === groundPlane) n.set(0, 1, 0);
   const ref = hit.object.userData.ref;
-  if (tool === 'box') {
-    const { w, d, h } = newSize;
+  if (tool === 'box' || tool === 'ramp') {
+    const { w, d } = newShape();
+    const { h } = newSize;
     let x = p.x, z = p.z, y;
     if (n.y > 0.5) y = p.y;
     else if (n.y < -0.5) y = p.y - h;
@@ -362,8 +388,9 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
   if (!at) return;
   checkpoint();
   let obj;
-  if (tool === 'box') {
-    obj = { id: newId(), x: at.x, z: at.z, y: at.y, w: newSize.w, d: newSize.d, h: newSize.h, kind: newKind };
+  if (tool === 'box' || tool === 'ramp') {
+    const { w, d, ramp } = newShape();
+    obj = { id: newId(), x: at.x, z: at.z, y: at.y, w, d, h: newSize.h, kind: newKind, ...(ramp ? { ramp } : {}) };
     map.boxes.push(obj);
   } else if (tool === 'pad') {
     obj = { id: newId(), x: at.x, y: at.y, z: at.z, radius: 1.2 };
@@ -372,7 +399,7 @@ renderer.domElement.addEventListener('pointerdown', (e) => {
     obj = { id: newId(), x: at.x, y: at.y, z: at.z, yaw: nearestYaw(at) };
     map.spawns.push(obj);
   }
-  selection = [{ type: tool, id: obj.id }];
+  selection = [{ type: tool === 'ramp' ? 'box' : tool, id: obj.id }];
   changed();
 });
 
@@ -406,7 +433,7 @@ function updateGhost(e) {
   const at = placement(e);
   ghost.visible = !!at;
   if (!at) return;
-  if (tool === 'box') ghost.position.set(at.x, at.y + newSize.h / 2, at.z);
+  if (tool === 'box' || tool === 'ramp') ghost.position.set(at.x, at.y + newSize.h / 2, at.z);
   else ghost.position.set(at.x, at.y, at.z);
   if (tool === 'spawn') ghost.rotation.y = nearestYaw(at);
 }
@@ -431,7 +458,7 @@ function rotateSelection() {
   if (!selection.length) return;
   checkpoint();
   for (const { s, o } of selectedObjs()) {
-    if (s.type === 'box') [o.w, o.d] = [o.d, o.w];
+    if (s.type === 'box') { [o.w, o.d] = [o.d, o.w]; if (o.ramp) o.ramp = RAMP_TURN[o.ramp]; }
     else if (s.type === 'spawn') o.yaw = round(o.yaw - Math.PI / 4);
     else if (o.dir) o.dir = { x: round(-o.dir.z), z: round(o.dir.x) };
   }
@@ -480,6 +507,8 @@ function focusSelection() {
 const props = $('[data-props]');
 let propsKey = '';
 
+const SHAPES = [['', 'Box'], ['x+', 'Ramp, rises toward +X'], ['x-', 'Ramp, rises toward −X'], ['z+', 'Ramp, rises toward +Z'], ['z-', 'Ramp, rises toward −Z']];
+
 function field(label, f, value, step = 0.5, extra = '') {
   return `<label class="prop${extra}">${label}<input type="number" step="${step}" data-f="${f}" value="${value}"></label>`;
 }
@@ -501,6 +530,7 @@ function refreshProps() {
       : f === 'dirDeg' ? (o.dir ? Math.round((Math.atan2(o.dir.x, -o.dir.z) * 180) / Math.PI) : 0)
       : f === 'top' ? round(o.y + o.h)
       : f === 'launch' ? (o.launch ?? '')
+      : f === 'ramp' ? (o.ramp ?? '')
       : o[f];
     if (input.tagName === 'SELECT') input.value = v; else input.value = v ?? '';
   }
@@ -521,8 +551,9 @@ function buildProps(objs) {
       <div class="prop-grid">${field('X', 'x', 0)}${field('Bottom Y', 'y', 0)}${field('Z', 'z', 0)}
       ${field('Width', 'w', 0)}${field('Height', 'h', 0)}${field('Depth', 'd', 0)}</div>
       <div class="prop-grid two" style="margin-top:8px">${field('Top Y', 'top', 0)}
-      <label class="prop">Kind<select data-f="kind">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
-      ${btns}<div class="prop-note">R swaps width and depth. Top Y is where you stand on it.</div>`;
+      <label class="prop">Kind<select data-f="kind">${KINDS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label class="prop prop-wide">Shape<select data-f="ramp">${SHAPES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label></div>
+      ${btns}<div class="prop-note">R turns it 90°. Top Y is where you stand on it (a ramp's high end). Sliding down ramps builds speed; running up and off the top launches you.</div>`;
   }
   if (s.type === 'pad') {
     const o = objs[0].o;
@@ -561,6 +592,15 @@ props.addEventListener('change', (e) => {
   if (!f) return;
   checkpoint();
   if (f === 'kind') o.kind = t.value;
+  else if (f === 'ramp') {
+    if (!t.value) delete o.ramp;
+    else {
+      // Keep the long side along the slope.
+      const along = RAMPS[t.value].axis;
+      if ((along === 'x' && o.d > o.w) || (along === 'z' && o.w > o.d)) [o.w, o.d] = [o.d, o.w];
+      o.ramp = t.value;
+    }
+  }
   else {
     const v = parseFloat(t.value);
     if (f === 'launch') { if (Number.isFinite(v)) o.launch = v; else delete o.launch; }
@@ -592,7 +632,7 @@ document.addEventListener('click', (e) => {
   if (k) {
     newKind = k.dataset.kind;
     refreshKinds();
-    if (tool !== 'box') setTool('box'); else rebuildGhost();
+    if (tool !== 'box' && tool !== 'ramp') setTool('box'); else rebuildGhost();
   }
   const c = e.target.closest('[data-cmd]');
   if (c) commands[c.dataset.cmd]?.();
@@ -603,7 +643,7 @@ for (const input of document.querySelectorAll('[data-new]')) {
     const v = parseFloat(input.value);
     if (Number.isFinite(v) && v > 0) newSize[input.dataset.new] = v;
     input.value = newSize[input.dataset.new];
-    if (tool !== 'box') setTool('box'); else rebuildGhost();
+    if (tool !== 'box' && tool !== 'ramp') setTool('box'); else rebuildGhost();
   });
 }
 
@@ -694,6 +734,7 @@ function status(e) {
   const hints = {
     select: 'Click to select · drag to move · Shift+click adds',
     box: 'Click floor/top to place · click a side to stack against it · Alt = no snap',
+    ramp: 'Click to place a ramp · it rises away from the camera (orbit to turn it) · Alt = no snap',
     pad: 'Click a surface to place a jump pad',
     spawn: 'Click a surface to place a spawn (faces the middle)',
   };
@@ -717,6 +758,7 @@ window.addEventListener('keydown', (e) => {
   if (['w', 'a', 's', 'd'].includes(k)) { held.add(k); return; }
   if (k === 'v') setTool('select');
   else if (k === 'b') setTool('box');
+  else if (k === 'm') setTool('ramp');
   else if (k === 'p') setTool('pad');
   else if (k === 'n') setTool('spawn');
   else if (k === 'r') rotateSelection();

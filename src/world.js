@@ -212,7 +212,12 @@ export const TARGETS = [
 //     spawns: [{ x, y, z, yaw }] }
 export function loadCustomMap(m) {
   BOXES.length = 0;
-  for (const b of m.boxes ?? []) BOXES.push(box(b.x, b.z, b.w, b.d, b.h, b.y ?? 0, b.kind ?? 'block'));
+  for (const b of m.boxes ?? []) {
+    const o = box(b.x, b.z, b.w, b.d, b.h, b.y ?? 0, b.kind ?? 'block');
+    const ramp = parseRamp(b.ramp);
+    if (ramp) o.ramp = ramp;
+    BOXES.push(o);
+  }
   PADS.length = 0;
   for (const p of m.pads ?? []) {
     const pad = { x: p.x, y: p.y ?? 0, z: p.z, radius: p.radius ?? 1.2 };
@@ -224,6 +229,46 @@ export function loadCustomMap(m) {
   if (s) Object.assign(SPAWN, { x: s.x, y: s.y ?? 0, z: s.z, yaw: s.yaw ?? 0 });
   PORTALS.length = 0;
   TARGETS.length = 0;
+}
+
+// ---------- ramps ----------
+// A ramp is a box whose top slopes: ramp = { axis: 'x' | 'z', dir: 1 | -1 }, rising toward +axis
+// (dir 1) or -axis (dir -1), from min.y at the low end to max.y at the high end.
+// In map files it's written 'x+', 'x-', 'z+' or 'z-'.
+export function parseRamp(r) {
+  const m = typeof r === 'string' && /^([xz])([+-])$/.exec(r);
+  return m ? { axis: m[1], dir: m[2] === '+' ? 1 : -1 } : null;
+}
+
+// Height of the ramp's surface at coordinate v along its axis.
+export function rampHeightAt(b, v) {
+  const { axis, dir } = b.ramp;
+  const len = b.max[axis] - b.min[axis];
+  const t = Math.min(1, Math.max(0, dir > 0 ? (v - b.min[axis]) / len : (b.max[axis] - v) / len));
+  return b.min.y + (b.max.y - b.min.y) * t;
+}
+
+export function rampSlope(b) {
+  return (b.max.y - b.min.y) / (b.max[b.ramp.axis] - b.min[b.ramp.axis]);
+}
+
+// What box b looks like to the AABB a: a plain box as-is; a ramp as a box topped at the highest
+// point of the slope under a. Everything that collides with the world goes through this.
+export function solidFor(b, a) {
+  if (!b.ramp) return b;
+  const { axis, dir } = b.ramp;
+  const v = dir > 0 ? Math.min(a.max[axis], b.max[axis]) : Math.max(a.min[axis], b.min[axis]);
+  return { min: b.min, max: { x: b.max.x, y: rampHeightAt(b, v), z: b.max.z }, ramp: b.ramp };
+}
+
+// The slope as a half-space n·p <= c (inside = under the surface). n is not normalized.
+export function rampPlane(b) {
+  const { axis, dir } = b.ramp;
+  const s = rampSlope(b);
+  const n = { x: 0, y: 1, z: 0 };
+  n[axis] = -dir * s;
+  // Surface: y = min.y + s * (v - min) for dir 1, or min.y + s * (max - v) for dir -1.
+  return { n, c: dir > 0 ? b.min.y - s * b.min[axis] : b.min.y + s * b.max[axis] };
 }
 
 export function overlaps(a, b) {
