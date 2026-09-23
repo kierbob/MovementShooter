@@ -21,3 +21,7 @@ __pycache__/
 # Logs / temp
 *.log
 *.tmp
+
+# Cloudflare tunnel binary (downloaded on first run of host-online.bat)
+server/bin/
+cloudflared*.exe

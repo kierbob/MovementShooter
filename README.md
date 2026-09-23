@@ -17,6 +17,20 @@ need an internet connection the first time.)
 
 ## Multiplayer (work in progress)
 
+### Play with friends anywhere (easiest)
+
+1. Install [Node.js](https://nodejs.org) (LTS) on the PC that hosts.
+2. Double-click `host-online.bat`. The first run downloads Cloudflare's free `cloudflared` tunnel
+   program (about 55 MB) into `server/bin/`.
+3. Wait for **Server is ONLINE**. A join link like
+   `https://kierbob.github.io/MovementShooter/?server=something.trycloudflare.com` is printed and
+   copied to your clipboard. Send it to your friends and open it yourself too.
+4. Keep the window open while you play. The address changes every time you restart it.
+
+Friends need nothing installed; they just open the link.
+
+### Local / LAN only
+
 1. Install [Node.js](https://nodejs.org) (LTS) on the PC that hosts.
 2. Double-click `start-server.bat` (first run installs the one dependency). The server listens on
    port **8080**.
@@ -28,7 +42,7 @@ Join links: `…/index.html?server=your-server-address` opens straight into Mult
 
 Current state: free-for-all with real combat. The server runs the same movement + weapon code
 as the game (authoritative), with lag-compensated hits, client prediction + reconciliation, health,
-deaths, respawns and a kill feed. Next: match flow (scoreboard, score limit) and online hosting.
+deaths, respawns, a kill feed and a Tab scoreboard. Next: match flow (score limit, timer).
 
 ## Modes
 

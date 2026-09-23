@@ -293,7 +293,18 @@ async function startOnline() {
   captureMouse();
   menu.setHint('Connecting…');
   try {
-    const welcome = await net.connect(settings.serverUrl, settings.playerName || 'Bean', settings.loadout);
+    // A few quick retries: a just-started tunnel can take a moment to answer.
+    let welcome = null;
+    for (let attempt = 1; ; attempt++) {
+      try {
+        welcome = await net.connect(settings.serverUrl, settings.playerName || 'Bean', settings.loadout);
+        break;
+      } catch (err) {
+        if (attempt >= 4 || /full/i.test(err.message)) throw err;
+        menu.setHint(`Connecting… (try ${attempt + 1} of 4)`);
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+    }
     online.active = true;
     document.body.dataset.mode = 'online';
     placePlayer(welcome.spawn);
@@ -310,7 +321,7 @@ async function startOnline() {
       ? `Couldn't reach your local server. If start-server.bat is running, your browser is blocking it: `
         + `click the icon left of the address bar → Site settings → Local network access → Allow, then reload. `
         + `(Or play from start.bat at http://localhost:5173.)`
-      : `${err.message}. Is the server running? (start-server.bat)`);
+      : `${err.message}. Is the server running? (host-online.bat / start-server.bat)`);
   }
 }
 
