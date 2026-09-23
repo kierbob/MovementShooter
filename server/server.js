@@ -7,7 +7,7 @@
 //   client → server  { t: 'hello', name, loadout }
 //                    { t: 'input', cmds: [{ seq, vt, forward, right, jump, fire, ..., yaw, pitch }] }
 //                    { t: 'ping', ts }
-//   server → client  { t: 'welcome', id, tickRate, snapRate, spawn }
+//   server → client  { t: 'welcome', id, tickRate, snapRate, spawn, map }   (map: { id, name, data } or null)
 //                    { t: 'snap', tick, players, proj, ev, me }
 //                    { t: 'pong', ts }   { t: 'full' }
 //
@@ -16,12 +16,32 @@
 // player's shots are processed, everyone else is rewound to where they were at `vt`.
 import { WebSocketServer } from 'ws';
 import { TICK_DT, TICK_RATE } from '../src/config.js';
-import { BOXES, ARENA } from '../src/world.js';
+import { readFileSync } from 'node:fs';
+import { BOXES, ARENA, loadCustomMap } from '../src/world.js';
 import { createPlayer, stepPlayer, snapshotState } from '../src/player.js';
 import { Combat } from '../src/combat.js';
 import { WEAPONS, ABILITIES, DEFAULT_LOADOUT } from '../src/items.js';
 
 const PORT = Number(process.env.PORT) || 8080;
+
+// Which map to host: MAP = a name from maps/ (e.g. bean-street), a path to an exported .json,
+// or "hub" for the old dev/arena map. Joining players download it automatically.
+const MAP_ARG = process.env.MAP || 'bean-street';
+let MAP = null;          // { id, name, data } sent to clients, or null for the hub
+let SPAWNS = ARENA.spawns;
+if (MAP_ARG !== 'hub') {
+  const file = /[\\/.]/.test(MAP_ARG) ? MAP_ARG : new URL(`../maps/${MAP_ARG}.json`, import.meta.url);
+  const text = readFileSync(file, 'utf8');
+  const data = JSON.parse(text);
+  loadCustomMap(data);
+  if (data.spawns?.length) SPAWNS = data.spawns;
+  let h = 5381;
+  for (let i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+  MAP = { id: h.toString(36), name: data.name || 'Custom map', data };
+  console.log(`Map: ${MAP.name} (${data.boxes?.length ?? 0} boxes, ${SPAWNS.length} spawns)`);
+} else {
+  console.log('Map: hub (dev map, bot arena area)');
+}
 const MAX_PLAYERS = 8;
 const SNAP_RATE = 30;
 const MAX_QUEUE = 12;          // buffered input ticks per client before we skip ahead
@@ -48,7 +68,7 @@ const NEUTRAL = {
 function pickSpawn(exclude = null) {
   // Farthest spawn from everyone alive (random among the best few so it isn't predictable).
   const others = [...clients.values()].filter((c) => c !== exclude && !c.player.dead).map((c) => c.player.pos);
-  const scored = ARENA.spawns.map((s) => ({
+  const scored = SPAWNS.map((s) => ({
     s, d: others.length ? Math.min(...others.map((o) => Math.hypot(o.x - s.x, o.z - s.z))) : Math.random(),
   })).sort((a, b) => b.d - a.d);
   return scored[Math.floor(Math.random() * Math.min(3, scored.length))].s;
@@ -117,7 +137,7 @@ wss.on('connection', (ws, req) => {
     if (msg.t === 'hello' && !client) {
       if (clients.size >= MAX_PLAYERS) { send(ws, { t: 'full' }); ws.close(); return; }
       const id = nextId++;
-      const player = createPlayer(ARENA.spawns[0]);
+      const player = createPlayer(SPAWNS[0]);
       const loadout = cleanLoadout(msg.loadout);
       const combat = new Combat(BOXES, []);
       combat.setLoadout(loadout);
@@ -134,7 +154,7 @@ wss.on('connection', (ws, req) => {
       client.target.name = client.name;
       clients.set(id, client);
       const spawn = spawnPlayer(client);
-      send(ws, { t: 'welcome', id, tickRate: TICK_RATE, snapRate: SNAP_RATE, spawn });
+      send(ws, { t: 'welcome', id, tickRate: TICK_RATE, snapRate: SNAP_RATE, spawn, map: MAP });
       events.push({ type: 'join', name: client.name });
       console.log(`+ ${client.name} joined (${clients.size}/${MAX_PLAYERS}) from ${req.socket.remoteAddress}`);
       return;

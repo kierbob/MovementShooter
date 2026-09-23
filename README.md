@@ -29,6 +29,10 @@ need an internet connection the first time.)
 
 Friends need nothing installed; they just open the link.
 
+**Maps:** the server hosts **Bean Street** by default. To host a map you made in the editor, Export
+it and drag the `.json` onto `host-online.bat` (or `start-server.bat`). Everyone who joins loads the
+server's map automatically (the game reloads once, then press Play).
+
 ### Local / LAN only
 
 1. Install [Node.js](https://nodejs.org) (LTS) on the PC that hosts.

@@ -50,6 +50,17 @@ const testMap = (() => {
   if (!new URLSearchParams(location.search).has('testmap')) return null;
   try { return JSON.parse(localStorage.getItem('movement-shooter.testmap')); } catch { return null; }
 })();
+// ?netmap=<id> = the map a multiplayer server sent us (see startOnline), kept for this tab.
+const NETMAP_KEY = 'movement-shooter.netmap';
+const netMap = (() => {
+  const id = new URLSearchParams(location.search).get('netmap');
+  if (!id || testMap) return null;
+  try {
+    const m = JSON.parse(sessionStorage.getItem(NETMAP_KEY));
+    return m?.id === id ? m : null;
+  } catch { return null; }
+})();
+const loadedMapId = testMap ? 'test' : netMap ? netMap.id : 'hub';
 if (testMap) {
   loadCustomMap(testMap);
   settings.mode = 'dev'; // test maps are solo
@@ -57,6 +68,8 @@ if (testMap) {
   tag.className = 'testmap-tag';
   tag.textContent = `TEST MAP · ${testMap.name || 'Untitled'}`;
   document.body.append(tag);
+} else if (netMap) {
+  loadCustomMap(netMap.data);
 }
 
 const { renderer, scene, camera, sun, applyLighting, lighting, updateSky, applyQuality } = createRenderer(BOXES);
@@ -319,6 +332,24 @@ async function startOnline() {
         await new Promise((r) => setTimeout(r, 2500));
       }
     }
+    // The server plays its own map. If ours is different, load theirs: the world is built once
+    // at startup, so switch to it with a quick reload (then press Play again).
+    const serverMapId = welcome.map?.id ?? 'hub';
+    if (serverMapId !== loadedMapId) {
+      net.close();
+      const url = new URL(location.href);
+      url.searchParams.delete('testmap');
+      if (welcome.map) {
+        try { sessionStorage.setItem(NETMAP_KEY, JSON.stringify(welcome.map)); } catch { /* storage blocked */ }
+        url.searchParams.set('netmap', welcome.map.id);
+      } else {
+        url.searchParams.delete('netmap');
+      }
+      try { sessionStorage.setItem(NETMAP_KEY + '.joined', welcome.map?.name ?? 'the hub'); } catch { /* ignore */ }
+      if (document.pointerLockElement) document.exitPointerLock();
+      location.replace(url);
+      return;
+    }
     online.active = true;
     document.body.dataset.mode = 'online';
     placePlayer(welcome.spawn);
@@ -458,6 +489,13 @@ window.addEventListener('keydown', (e) => {
 });
 
 setState('menu');
+try {
+  const switched = sessionStorage.getItem(NETMAP_KEY + '.joined');
+  if (switched) {
+    sessionStorage.removeItem(NETMAP_KEY + '.joined');
+    menu.setHint(`Loaded the server's map (${switched}). Press Play to jump in!`);
+  }
+} catch { /* ignore */ }
 
 // Compile every effect's shader up front (once the gun models have had a moment to load),
 // so the first shot/explosion/bullet hole doesn't freeze the game.

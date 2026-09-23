@@ -13,5 +13,6 @@ if not exist node_modules (
   call npm install --no-audit --no-fund
 )
 
-node host.js
+rem Hosts Bean Street by default. Drag an exported map .json onto this file to host that instead.
+node host.js %1
 pause

@@ -41,6 +41,8 @@ function copyToClipboard(text) {
 }
 
 await ensureCloudflared();
+// Map to host: a name from maps/ or a dragged-in .json (host-online.bat passes it along).
+if (process.argv[2]) process.env.MAP = process.argv[2];
 await import('./server.js'); // start the game server in this same process
 
 console.log('Opening Cloudflare tunnel…');
