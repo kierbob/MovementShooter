@@ -16,6 +16,8 @@ export class Input {
     this.locked = false;
     this.keyboardLocked = false;
     this.rawMouse = false;
+    this.spikes = 0;            // bogus mouse jumps dropped (shown in the F4 stats panel)
+    this.lastSpike = '-';
 
     this.lastEvent = null;      // { type, code, t }
     this.unconsumed = [];       // timestamps of inputs the sim hasn't seen yet
@@ -153,7 +155,11 @@ export class Input {
     // Without raw input, Chrome on Windows sometimes reports the hidden cursor being re-centered
     // as real movement: one big jump, usually AGAINST the way you're moving (the camera "snaps").
     // Drop events that are way bigger than recent ones, or big and reversed on an axis.
-    if (!this.rawMouse && this.isSpike(e.movementX, e.movementY)) return;
+    if (!this.rawMouse && this.isSpike(e.movementX, e.movementY)) {
+      this.spikes++;
+      this.lastSpike = `${e.movementX}, ${e.movementY}`;
+      return;
+    }
     const sens = radiansPerCount();
     this.yaw -= e.movementX * sens;
     this.pitch -= e.movementY * sens;

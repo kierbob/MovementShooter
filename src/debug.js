@@ -90,7 +90,7 @@ pos        ${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}
 keys held  ${esc(keys)}
 last event ${esc(evText)}
 key→sim    ${input.lastDelayMs.toFixed(2)} ms
-mouse      ${input.locked ? 'locked' : 'free'}, ${input.rawMouse ? 'raw' : 'OS accel'}, ${input.mouseRate} ev/s
+mouse      ${input.locked ? 'locked' : 'free'}, ${input.rawMouse ? 'raw' : 'OS accel'}, ${input.mouseRate} ev/s, fake jumps blocked: ${input.spikes} (last ${input.lastSpike})
 keyboard   ${input.keyboardLocked ? 'locked (browser shortcuts blocked)' : '<span style="color:#f0883e">not locked — Ctrl+W asks before closing</span>'}
 yaw/pitch  ${(input.yaw * 180 / Math.PI).toFixed(1)}°, ${(input.pitch * 180 / Math.PI).toFixed(1)}°
 
