@@ -1,40 +1,53 @@
 // Movement Shooter multiplayer server.
-// Authoritative: every player's movement is simulated HERE with the exact same code the
-// browser uses (../src/player.js). Clients send their inputs; the server steps everyone at
-// 120 ticks/s and broadcasts snapshots at 30/s.
+// Authoritative: every player's movement AND combat is simulated here with the exact same
+// code the browser uses (../src/player.js, ../src/combat.js). Clients send their inputs;
+// the server steps everyone at 120 ticks/s and sends snapshots at 30/s.
 //
-// Protocol (JSON messages):
-//   client → server  { t: 'hello', name }
-//                    { t: 'input', cmds: [{ seq, forward, right, jump, ..., yaw, pitch }] }
+// Protocol (JSON):
+//   client → server  { t: 'hello', name, loadout }
+//                    { t: 'input', cmds: [{ seq, vt, forward, right, jump, fire, ..., yaw, pitch }] }
 //                    { t: 'ping', ts }
-//   server → client  { t: 'welcome', id, tickRate, snapRate }
-//                    { t: 'snap', tick, players: [...] }
-//                    { t: 'pong', ts }
-//                    { t: 'full' }  (server is full)
+//   server → client  { t: 'welcome', id, tickRate, snapRate, spawn }
+//                    { t: 'snap', tick, players, proj, ev, me }
+//                    { t: 'pong', ts }   { t: 'full' }
+//
+// Lag compensation: each input carries `vt`, the server tick the client was *looking at*
+// when it pressed the button (other players are drawn ~100 ms in the past). While that
+// player's shots are processed, everyone else is rewound to where they were at `vt`.
 import { WebSocketServer } from 'ws';
 import { TICK_DT, TICK_RATE } from '../src/config.js';
 import { BOXES, ARENA } from '../src/world.js';
-import { createPlayer, stepPlayer } from '../src/player.js';
+import { createPlayer, stepPlayer, snapshotState } from '../src/player.js';
+import { Combat } from '../src/combat.js';
+import { WEAPONS, ABILITIES, DEFAULT_LOADOUT } from '../src/items.js';
 
 const PORT = Number(process.env.PORT) || 8080;
 const MAX_PLAYERS = 8;
 const SNAP_RATE = 30;
-const MAX_QUEUE = 12; // buffered input ticks per client before we start skipping ahead
+const MAX_QUEUE = 12;          // buffered input ticks per client before we skip ahead
+const HISTORY = 128;           // ticks of position history kept for lag compensation (~1 s)
+const MAX_REWIND = 30;         // never rewind more than 250 ms
+const RESPAWN_DELAY = 2.5;
+const SPAWN_PROTECTION = 1.5;
+const REGEN_DELAY = 3;         // matches the Bot Arena
+const REGEN_RATE = 30;
 
 const COLORS = [0x4fc3ff, 0xff6b6b, 0x7ee787, 0xffd35a, 0xc792ea, 0xff9e3d, 0x5ce1e6, 0xff7eb6];
 
 const clients = new Map(); // id -> client
 let nextId = 1;
 let tick = 0;
+let events = [];           // gameplay events since the last snapshot (sent to everyone)
 
 const NEUTRAL = {
   forward: 0, right: 0, jump: false, jumpHeld: false, sprint: false, crouch: false,
-  slide: false, slidePressed: false, yaw: 0, pitch: 0,
+  slide: false, slidePressed: false, fire: false, firePressed: false, reload: false,
+  ability: false, slot: null, cycle: 0, yaw: 0, pitch: 0,
 };
 
-function pickSpawn() {
-  // Farthest spawn from everyone else (random among the best few so it isn't predictable).
-  const others = [...clients.values()].map((c) => c.player.pos);
+function pickSpawn(exclude = null) {
+  // Farthest spawn from everyone alive (random among the best few so it isn't predictable).
+  const others = [...clients.values()].filter((c) => c !== exclude && !c.player.dead).map((c) => c.player.pos);
   const scored = ARENA.spawns.map((s) => ({
     s, d: others.length ? Math.min(...others.map((o) => Math.hypot(o.x - s.x, o.z - s.z))) : Math.random(),
   })).sort((a, b) => b.d - a.d);
@@ -47,12 +60,37 @@ function freeColor() {
 }
 
 function cleanName(raw) {
-  const n = String(raw ?? '').replace(/[^\w \-.!?]/g, '').trim().slice(0, 16);
+  const n = String(raw ?? '').replace(/[^\w \-.!?]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
   return n || 'Bean';
 }
 
+function cleanLoadout(lo) {
+  return {
+    primary: WEAPONS[lo?.primary]?.slot === 'primary' ? lo.primary : DEFAULT_LOADOUT.primary,
+    secondary: WEAPONS[lo?.secondary]?.slot === 'secondary' ? lo.secondary : DEFAULT_LOADOUT.secondary,
+    ability: ABILITIES[lo?.ability] ? lo.ability : DEFAULT_LOADOUT.ability,
+  };
+}
+
 function send(ws, msg) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  if (ws.readyState === ws.OPEN) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
+}
+
+function spawnPlayer(c) {
+  const s = pickSpawn(c);
+  const p = c.player;
+  p.pos = { x: s.x, y: s.y, z: s.z };
+  p.vel = { x: 0, y: 0, z: 0 };
+  p.sliding = false;
+  p.hp = p.maxHp;
+  p.dead = false;
+  p.invuln = SPAWN_PROTECTION;
+  p.regenDelay = 0;
+  c.target.hp = c.target.maxHp;
+  c.target.dead = false;
+  c.combat.setLoadout(c.loadout); // fresh ammo + ability
+  c.lastCmd = { ...NEUTRAL, yaw: s.yaw ?? 0 };
+  return s;
 }
 
 const wss = new WebSocketServer({ port: PORT });
@@ -78,15 +116,26 @@ wss.on('connection', (ws, req) => {
 
     if (msg.t === 'hello' && !client) {
       if (clients.size >= MAX_PLAYERS) { send(ws, { t: 'full' }); ws.close(); return; }
-      const spawn = pickSpawn();
-      const player = createPlayer(spawn);
-      player.pos = { x: spawn.x, y: spawn.y, z: spawn.z };
+      const id = nextId++;
+      const player = createPlayer(ARENA.spawns[0]);
+      const loadout = cleanLoadout(msg.loadout);
+      const combat = new Combat(BOXES, []);
+      combat.setLoadout(loadout);
       client = {
-        id: nextId++, ws, name: cleanName(msg.name), color: freeColor(), player,
-        queue: [], lastCmd: { ...NEUTRAL, yaw: spawn.yaw ?? 0 }, lastSeq: 0,
+        id, ws, name: cleanName(msg.name), color: freeColor(), player, loadout, combat,
+        // This player's hitboxes, as seen by everyone else's Combat.
+        target: {
+          id, kind: 'player', name: '', pos: player.pos, base: { ...player.pos }, move: null, yaw: 0,
+          hp: player.maxHp, maxHp: player.maxHp, dead: false, respawnT: 0, body: player,
+        },
+        history: new Array(HISTORY), queue: [], lastCmd: { ...NEUTRAL }, lastSeq: 0, viewTick: 0,
+        kills: 0, deaths: 0, respawnT: 0,
       };
-      clients.set(client.id, client);
-      send(ws, { t: 'welcome', id: client.id, tickRate: TICK_RATE, snapRate: SNAP_RATE, spawn });
+      client.target.name = client.name;
+      clients.set(id, client);
+      const spawn = spawnPlayer(client);
+      send(ws, { t: 'welcome', id, tickRate: TICK_RATE, snapRate: SNAP_RATE, spawn });
+      events.push({ type: 'join', name: client.name });
       console.log(`+ ${client.name} joined (${clients.size}/${MAX_PLAYERS}) from ${req.socket.remoteAddress}`);
       return;
     }
@@ -107,58 +156,147 @@ wss.on('connection', (ws, req) => {
   ws.on('close', () => {
     if (!client) return;
     clients.delete(client.id);
+    events.push({ type: 'leave', name: client.name });
     console.log(`- ${client.name} left (${clients.size}/${MAX_PLAYERS})`);
   });
 });
 
-// Only trust the fields the movement code reads, with sane types.
+// Only trust the fields the game code reads, with sane types.
 function sanitizeCmd(c) {
   const clampAxis = (n) => (n > 0 ? 1 : n < 0 ? -1 : 0);
   return {
     forward: clampAxis(c.forward), right: clampAxis(c.right),
     jump: !!c.jump, jumpHeld: !!c.jumpHeld, sprint: !!c.sprint, crouch: !!c.crouch,
     slide: !!c.slide, slidePressed: !!c.slidePressed,
+    fire: !!c.fire, firePressed: !!c.firePressed, reload: !!c.reload, ability: !!c.ability,
+    slot: c.slot === 'primary' || c.slot === 'secondary' ? c.slot : null,
+    cycle: clampAxis(c.cycle),
     yaw: Number.isFinite(c.yaw) ? c.yaw : 0,
     pitch: Number.isFinite(c.pitch) ? Math.max(-1.6, Math.min(1.6, c.pitch)) : 0,
   };
 }
 
-function stepWorld() {
-  tick++;
-  for (const c of clients.values()) {
-    const raw = c.queue.shift();
-    let cmd;
-    if (raw) {
-      cmd = sanitizeCmd(raw);
-      c.lastSeq = raw.seq;
-      c.lastCmd = cmd;
-    } else {
-      // No input arrived for this tick (network hiccup): keep doing what they were doing,
-      // but don't repeat one-shot presses.
-      cmd = { ...c.lastCmd, jump: false, slidePressed: false };
-    }
-    stepPlayer(c.player, cmd, BOXES, TICK_DT);
-    if (c.player.pos.y < -30) {
-      const s = pickSpawn();
-      c.player.pos = { x: s.x, y: s.y, z: s.z };
-      c.player.vel = { x: 0, y: 0, z: 0 };
+function recordHistory(c) {
+  const p = c.player;
+  c.history[tick % HISTORY] = { tick, x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: c.target.yaw, dead: p.dead };
+}
+
+// Move every other player's hitbox back to where they were at server tick `vt`.
+function rewindOthers(shooter, vt) {
+  const back = Math.max(tick - MAX_REWIND, Math.min(tick, vt));
+  const saved = [];
+  for (const o of clients.values()) {
+    if (o === shooter) continue;
+    const h = o.history[back % HISTORY];
+    if (!h || h.tick !== back) continue;
+    saved.push([o.target, o.target.pos, o.target.yaw]);
+    o.target.pos = { x: h.x, y: h.y, z: h.z };
+    o.target.yaw = h.yaw;
+  }
+  return () => { for (const [t, pos, yaw] of saved) { t.pos = pos; t.yaw = yaw; } };
+}
+
+// Turn this player's combat events into server events: kills, damage, and effects to replicate.
+function collectCombatEvents(c) {
+  for (const e of c.combat.fx.splice(0)) {
+    e.by = c.id;
+    events.push(e);
+    if (e.type !== 'hit') continue;
+    const victim = clients.get(e.target);
+    if (!victim) continue;
+    victim.player.hp = victim.target.hp;
+    victim.player.regenDelay = REGEN_DELAY;
+    if (e.kill && !victim.player.dead) {
+      victim.player.dead = true;
+      victim.respawnT = RESPAWN_DELAY;
+      victim.deaths++;
+      c.kills++;
+      events.push({ type: 'kill', killer: c.name, victim: victim.name, killerId: c.id, victimId: victim.id, weapon: c.combat.weapon.id });
+      console.log(`  ${c.name} splatted ${victim.name}`);
     }
   }
 }
 
+function stepWorld() {
+  tick++;
+  const all = [...clients.values()];
+  for (const c of all) {
+    c.target.pos = c.player.pos;
+    c.target.yaw = c.lastCmd.yaw + Math.PI;  // bean models face +Z; camera yaw 0 looks down -Z
+    c.target.dead = c.player.dead;
+  }
+
+  for (const c of all) {
+    const p = c.player;
+    // Each player is advanced exactly once per input they sent — the same steps their own
+    // screen simulated — so prediction and server agree exactly (movement AND gun timing).
+    // The budget allows catching up after a network hiccup, but on average no more than one
+    // input per server tick (so nobody can speed-hack by sending inputs faster).
+    c.budget = Math.min((c.budget ?? 0) + 1, MAX_QUEUE);
+
+    if (p.dead) {
+      // Swallow inputs while dead (so the client's correction stays in sync).
+      for (const raw of c.queue) c.lastSeq = raw.seq;
+      c.queue.length = 0;
+      c.respawnT -= TICK_DT;
+      if (c.respawnT <= 0) { spawnPlayer(c); events.push({ type: 'respawn', id: c.id }); }
+      continue;
+    }
+
+    p.invuln = Math.max(0, p.invuln - TICK_DT);
+    p.regenDelay = Math.max(0, p.regenDelay - TICK_DT);
+    if (p.regenDelay === 0 && p.hp < p.maxHp) { p.hp = Math.min(p.maxHp, p.hp + REGEN_RATE * TICK_DT); c.target.hp = p.hp; }
+
+    while (c.queue.length && c.budget >= 1 && !p.dead) {
+      const raw = c.queue.shift();
+      c.budget--;
+      const cmd = sanitizeCmd(raw);
+      c.lastSeq = raw.seq;
+      c.lastCmd = cmd;
+      c.target.yaw = cmd.yaw + Math.PI;
+      // Combat first (so knockback applies this step), with everyone else rewound to what
+      // this player saw when they pressed the button.
+      c.combat.targets = all.filter((o) => o !== c).map((o) => o.target);
+      const restore = rewindOthers(c, Number.isFinite(raw.vt) ? raw.vt : tick);
+      c.combat.tick(p, cmd, TICK_DT);
+      restore();
+      collectCombatEvents(c);
+      stepPlayer(p, cmd, BOXES, TICK_DT);
+      if (p.pos.y < -30) spawnPlayer(c);
+    }
+  }
+  for (const c of all) recordHistory(c);
+}
+
 function snapshot() {
-  const players = [...clients.values()].map((c) => {
+  const players = JSON.stringify([...clients.values()].map((c) => {
     const p = c.player;
     return {
       id: c.id, name: c.name, color: c.color, seq: c.lastSeq,
       x: +p.pos.x.toFixed(3), y: +p.pos.y.toFixed(3), z: +p.pos.z.toFixed(3),
-      vx: +p.vel.x.toFixed(3), vy: +p.vel.y.toFixed(3), vz: +p.vel.z.toFixed(3),
+      vx: +p.vel.x.toFixed(2), vy: +p.vel.y.toFixed(2), vz: +p.vel.z.toFixed(2),
       yaw: +c.lastCmd.yaw.toFixed(3), pitch: +c.lastCmd.pitch.toFixed(3),
       cr: p.crouching ? 1 : 0, sl: p.sliding ? 1 : 0, gr: p.grounded ? 1 : 0,
+      dead: p.dead ? 1 : 0, k: c.kills, d: c.deaths, w: c.combat.weapon.id,
     };
-  });
-  const msg = JSON.stringify({ t: 'snap', tick, players });
-  for (const c of clients.values()) if (c.ws.readyState === c.ws.OPEN) c.ws.send(msg);
+  }));
+  // Every live projectile, tagged with its owner (clients draw everyone else's).
+  const proj = [];
+  for (const c of clients.values()) {
+    for (const pr of c.combat.projectiles) {
+      proj.push({ id: pr.id, o: c.id, k: pr.kind, st: pr.stuck ? 1 : 0,
+        x: +pr.pos.x.toFixed(2), y: +pr.pos.y.toFixed(2), z: +pr.pos.z.toFixed(2),
+        vx: +pr.vel.x.toFixed(2), vy: +pr.vel.y.toFixed(2), vz: +pr.vel.z.toFixed(2) });
+    }
+  }
+  const head = `{"t":"snap","tick":${tick},"players":${players},"proj":${JSON.stringify(proj)},"ev":${JSON.stringify(events)}`;
+  events = [];
+  for (const c of clients.values()) {
+    if (c.ws.readyState !== c.ws.OPEN) continue;
+    // Each client also gets its own full movement state for exact prediction correction.
+    const me = { seq: c.lastSeq, state: snapshotState(c.player), respawnIn: c.player.dead ? +c.respawnT.toFixed(2) : 0 };
+    c.ws.send(`${head},"me":${JSON.stringify(me)}}`);
+  }
 }
 
 // Fixed-rate loop. setInterval alone drifts on Windows, so we accumulate real time and

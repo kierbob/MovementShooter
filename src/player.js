@@ -44,7 +44,28 @@ export function respawn(p, spawn) {
   logEvent(p, 'respawn');
 }
 
+// ---------- networking helpers ----------
+// Everything the movement code reads/writes, as plain JSON (events log excluded).
+export function snapshotState(p) {
+  const s = {};
+  for (const k of Object.keys(p)) {
+    if (k === 'events' || k === 'impulseLog' || k === 'quiet') continue;
+    const v = p[k];
+    s[k] = v && typeof v === 'object' ? { ...v } : v;
+  }
+  return s;
+}
+
+// Put a player back into a state produced by snapshotState (keeps its events log).
+export function restoreState(p, s) {
+  for (const k of Object.keys(s)) {
+    const v = s[k];
+    p[k] = v && typeof v === 'object' ? { ...v } : v;
+  }
+}
+
 function logEvent(p, name, detail = '') {
+  if (p.quiet) return; // replaying inputs for network correction — don't re-log jumps/landings
   p.events.push({ t: p.time, name, detail });
   if (p.events.length > 8) p.events.shift();
 }
@@ -56,6 +77,8 @@ export function eyePosition(p) {
 // Knockback from guns/explosions. Anything pushing up cancels your fall first,
 // so a rocket jump works the same whether you're rising or falling.
 export function applyImpulse(p, imp, source = '') {
+  // Online: the client records its own predicted knockback so it can be replayed exactly.
+  if (p.impulseLog) p.impulseLog.push({ x: imp.x, y: imp.y, z: imp.z });
   if (imp.y > 0) {
     p.vel.y = Math.max(p.vel.y, 0);
     p.grounded = false;

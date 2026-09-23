@@ -1,6 +1,6 @@
 import { TICK_DT, PLAYER, MOVE } from './config.js';
 import { BOXES, SPAWN, TARGETS } from './world.js';
-import { createPlayer, stepPlayer, respawn, horizontalSpeed } from './player.js';
+import { createPlayer, stepPlayer, respawn, horizontalSpeed, restoreState, applyImpulse } from './player.js';
 import { Input } from './input.js';
 import { createRenderer, LIGHTING } from './render.js';
 import { DebugPanel } from './debug.js';
@@ -135,13 +135,129 @@ function resetHealth(invuln = 0) {
 
 // ---------- multiplayer ----------
 const net = new Net();
-const online = { active: false, remotes: new Map() }; // remote player id -> combat target
+const online = {
+  active: false,
+  remotes: new Map(),             // server player id -> local combat target (their bean)
+  history: [],                    // our recent inputs: [{ seq, cmd, impulses }] for replay
+  proj: new Map(),                // server projectile id -> drawable projectile (other players')
+  visualOffset: { x: 0, y: 0, z: 0 },
+};
 
 function stopOnline() {
   online.active = false;
   net.close();
   for (const t of online.remotes.values()) combat.removeTarget(t);
   online.remotes.clear();
+  online.history = [];
+  online.proj.clear();
+  fx.extraProjectiles = null;
+  player.impulseLog = null;
+}
+
+// Prediction correction ("reconciliation"). The server sent our authoritative state as of input
+// #seq. Rewind to it, then replay every input we've sent since (plus our own predicted
+// knockback) — so we stay responsive but always converge to the server's truth, including
+// knockback from other players' explosions. Any visible jump is eased out by visualOffset.
+function reconcile() {
+  net.meFresh = false;
+  const me = net.me;
+  online.history = online.history.filter((h) => h.seq > me.seq);
+  const before = { ...player.pos };
+  restoreState(player, me.state);
+  player.quiet = true;
+  for (const h of online.history) {
+    for (const imp of h.impulses ?? []) applyImpulse(player, imp);
+    if (!player.dead) stepPlayer(player, h.cmd, BOXES, TICK_DT);
+  }
+  player.quiet = false;
+  const dx = before.x - player.pos.x, dy = before.y - player.pos.y, dz = before.z - player.pos.z;
+  if (Math.hypot(dx, dy, dz) < 3) {
+    online.visualOffset.x += dx; online.visualOffset.y += dy; online.visualOffset.z += dz;
+  } else {
+    online.visualOffset = { x: 0, y: 0, z: 0 }; // respawn / big correction: just go there
+  }
+  prevPos = { x: prevPos.x - dx, y: prevPos.y - dy, z: prevPos.z - dz };
+}
+
+// Where a remote player's floating gun is (for their muzzle flash / tracers).
+function remoteGunPos(t) {
+  const c = Math.cos(t.yaw), s = Math.sin(t.yaw), ox = -0.52, oz = 0.6;
+  return { x: t.pos.x + ox * c + oz * s, y: t.pos.y + 1.0, z: t.pos.z - ox * s + oz * c };
+}
+
+// Gameplay events from the server. Our own shots/explosions were already shown locally
+// (prediction), so from ourselves we only take the confirmed hits. Everyone else's effects are
+// shown in a lighter form: muzzle flash + tracers, no comic words.
+function handleNetEvents(evs) {
+  const myId = net.id;
+  for (const e of evs) {
+    if (e.type === 'kill') {
+      const mine = e.killerId === myId, me = e.victimId === myId;
+      hud.feed(`<b class="${mine ? 'you' : 'bot'}">${mine ? 'YOU' : e.killer}</b><span class="verb">SPLATTED</span><b class="${me ? 'you' : 'bot'}">${me ? 'YOU' : e.victim}</b>`,
+        mine ? 'mine' : me ? 'died' : '');
+      if (me) sound.play('death');
+      continue;
+    }
+    if (e.type === 'join' || e.type === 'leave') {
+      hud.feed(`<b class="bot">${e.name}</b> ${e.type === 'join' ? 'joined' : 'left'}`);
+      continue;
+    }
+    if (e.type === 'hit') {
+      if (e.target === myId) {
+        // We got hit: hurt flash, direction arrow, sound.
+        const shooter = online.remotes.get(e.by);
+        const hurt = [{ type: 'hurt', dmg: e.dmg, from: shooter ? { ...shooter.pos } : null }];
+        hud.handle(hurt);
+        fx.handle(hurt, player);
+        sound.play('hurt', { gap: 0.06 });
+        continue;
+      }
+      const victim = online.remotes.get(e.target);
+      if (!victim) continue;
+      const local = { ...e, target: victim.id, bot: false };
+      if (e.by === myId) {
+        // Our hit, confirmed by the server: hitmarker, damage number, splat, sound.
+        hud.handle([local]);
+        fx.handle([local], player);
+        playCombatSounds(sound, [local]);
+      } else {
+        fx.handle([{ ...local, quiet: true }], player);
+      }
+      continue;
+    }
+    if (e.by === myId) continue; // our own shots/impacts/explosions were predicted locally
+    if (e.type === 'shot') {
+      const shooter = online.remotes.get(e.by);
+      if (!shooter) continue;
+      const gun = remoteGunPos(shooter);
+      fx.remoteShot(e, gun);
+      sound.play(e.weapon, { pos: gun, gap: 0 });
+    } else if (e.type === 'impact' || e.type === 'explosion') {
+      fx.handle([{ ...e, quiet: true }], player);
+      playCombatSounds(sound, [e]);
+    }
+  }
+}
+
+// Other players' rockets/grenades/knives: positions from snapshots, extrapolated between them.
+function syncRemoteProjectiles(dt) {
+  const seen = new Set();
+  for (const s of net.proj) {
+    if (s.o === net.id) continue; // ours are simulated locally
+    seen.add(s.id);
+    let p = online.proj.get(s.id);
+    if (!p) { p = { id: s.id, kind: s.k, pos: {}, vel: {}, stuck: false, resting: false }; online.proj.set(s.id, p); }
+    if (p.snapKey !== s) { // new snapshot data: jump to it
+      p.snapKey = s;
+      p.pos = { x: s.x, y: s.y, z: s.z };
+      p.vel = { x: s.vx, y: s.vy, z: s.vz };
+      p.stuck = !!s.st;
+    } else if (!p.stuck) {
+      p.pos = { x: p.pos.x + p.vel.x * dt, y: p.pos.y + p.vel.y * dt, z: p.pos.z + p.vel.z * dt };
+    }
+  }
+  for (const id of [...online.proj.keys()]) if (!seen.has(id)) online.proj.delete(id);
+  fx.extraProjectiles = [...online.proj.values()];
 }
 
 net.onDisconnect = () => {
@@ -165,6 +281,7 @@ function syncRemotes() {
     t.pos = { x: s.x, y: s.y, z: s.z };
     t.yaw = s.yaw + Math.PI; // bean models face +Z; camera yaw 0 looks down -Z
     t.low = !!(s.cr || s.sl);
+    t.dead = !!s.dead;
   }
   for (const [id, t] of online.remotes) {
     if (!seen.has(id)) { combat.removeTarget(t); online.remotes.delete(id); }
@@ -176,7 +293,7 @@ async function startOnline() {
   captureMouse();
   menu.setHint('Connecting…');
   try {
-    const welcome = await net.connect(settings.serverUrl, settings.playerName || 'Bean');
+    const welcome = await net.connect(settings.serverUrl, settings.playerName || 'Bean', settings.loadout);
     online.active = true;
     document.body.dataset.mode = 'online';
     placePlayer(welcome.spawn);
@@ -357,6 +474,8 @@ function frame(now) {
   const dt = Math.min(dtMs / 1000, 0.1);
   let ticks = 0;
 
+  if (online.active && net.meFresh) reconcile();
+
   if (state === 'playing') {
     acc += Math.min(dtMs / 1000, 0.25);
     // Fixed-rate simulation, decoupled from frame rate.
@@ -371,18 +490,14 @@ function frame(now) {
       }
       let cmd = input.sample(performance.now());
       if (player.dead) cmd = { ...DEAD_CMD, yaw: cmd.yaw, pitch: cmd.pitch }; // no moving or shooting while splatted
+      if (online.active) player.impulseLog = []; // record our own knockback so it can be replayed
       combat.tick(player, cmd, TICK_DT); // before movement so knockback applies this tick
       if (!player.dead) stepPlayer(player, cmd, BOXES, TICK_DT);
       if (online.active) {
-        net.queueCmd(cmd);
-        // Step 1 correction: if we've drifted far from where the server has us, snap back.
-        // (Step 2 replaces this with proper replay-based reconciliation.)
-        const s = net.self;
-        if (s && Math.hypot(s.x - player.pos.x, s.y - player.pos.y, s.z - player.pos.z) > 3) {
-          player.pos = { x: s.x, y: s.y, z: s.z };
-          player.vel = { x: s.vx, y: s.vy, z: s.vz };
-          prevPos = { ...player.pos };
-        }
+        const seq = net.queueCmd(cmd);
+        online.history.push({ seq, cmd, impulses: player.impulseLog });
+        player.impulseLog = null;
+        if (online.history.length > 360) online.history.shift();
       } else if (arena.active) {
         bots.tick(player, TICK_DT);
         arenaTick(TICK_DT);
@@ -390,7 +505,7 @@ function frame(now) {
         trial.tick(player, TICK_DT);
         handleTrialEvents(trial.events.splice(0));
       }
-      if (player.pos.y < -30) {
+      if (player.pos.y < -30 && !online.active) { // online, the server handles falling out
         if (arena.active) placePlayer(bots.farSpawn(ARENA.center));
         else respawn(player, SPAWN);
       }
@@ -418,10 +533,14 @@ function frame(now) {
 
     // Interpolate between the last two ticks; look direction is applied instantly.
     const a = acc / TICK_DT;
+    // Online corrections are eased out over a few frames instead of popping the camera.
+    const k = Math.exp(-dt * 12);
+    const vo = online.visualOffset;
+    vo.x *= k; vo.y *= k; vo.z *= k;
     camera.position.set(
-      prevPos.x + (player.pos.x - prevPos.x) * a,
-      prevPos.y + (player.pos.y - prevPos.y) * a + eye,
-      prevPos.z + (player.pos.z - prevPos.z) * a,
+      prevPos.x + (player.pos.x - prevPos.x) * a + vo.x,
+      prevPos.y + (player.pos.y - prevPos.y) * a + eye + vo.y,
+      prevPos.z + (player.pos.z - prevPos.z) * a + vo.z,
     );
     camera.rotation.set(input.pitch, input.yaw, roll);
     fx.applyShake(camera);
@@ -431,11 +550,13 @@ function frame(now) {
   if (online.active) {
     net.flush();
     syncRemotes();
+    syncRemoteProjectiles(dt);
   }
   prof.mark('sim', tFrame);
   let t0 = performance.now();
   const events = combat.fx.splice(0);
   sound.setListener(camera.position, input.yaw);
+  if (online.active) handleNetEvents(net.takeEvents());
   playCombatSounds(sound, events);
   if (arena.active) handleArenaEvents(events);
   if (state === 'playing') playMovementSounds(sound, player);
@@ -467,7 +588,11 @@ function frame(now) {
       hud.updatePlayer(dt, player, input.yaw, arena.respawnT);
       hud.updateArena(arena);
     }
-    if (online.active) hud.updateOnline(net.remotes.size + 1, net.ping);
+    if (online.active) {
+      hud.updateOnline(net.remotes.size + 1, net.ping);
+      hud.updatePlayer(dt, player, input.yaw, net.me?.respawnIn ?? 0);
+      hud.updateArena({ kills: net.self?.k ?? 0, deaths: net.self?.d ?? 0 });
+    }
     prof.mark('hud', t0);
     debug.draw(player, input, combat, prof, renderer.info.render, online.active ? net.ping : null);
   }

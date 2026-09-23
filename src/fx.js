@@ -533,6 +533,8 @@ export class FX {
         const tv = this.targetViews.get(e.target);
         if (tv) tv.flash = 0.08;
         this.hitSplat(e);
+        // e.quiet: someone else's hit (online) — no comic words on your screen.
+        if (e.quiet) continue;
         if (e.kill) this.onWord?.('SPLAT!', { world: e.pos }, 'kill');
         else if (e.zone === 'head' && Math.random() < 0.5) this.onWord?.('BONK!', { world: e.pos }, 'head');
       } else if (e.type === 'impact') {
@@ -540,7 +542,7 @@ export class FX {
       } else if (e.type === 'explosion') {
         const color = EXPLOSION_COLOR[e.kind] ?? 0xff8a30;
         this.explosion(e.pos, e.radius, e.kind);
-        this.onWord?.(e.kind === 'impulse' ? 'BWOMP!' : 'KABOOM!', { world: e.pos }, e.kind === 'impulse' ? 'blue' : 'big');
+        if (!e.quiet) this.onWord?.(e.kind === 'impulse' ? 'BWOMP!' : 'KABOOM!', { world: e.pos }, e.kind === 'impulse' ? 'blue' : 'big');
         const slot = this.flashLights[this.nextLight++ % this.flashLights.length];
         slot.light.color.setHex(color);
         slot.light.position.set(e.pos.x, e.pos.y + 0.3, e.pos.z);
@@ -731,6 +733,13 @@ export class FX {
     this.addRing(pos, pal[1], 0.3, radius * 1.15, 0.3, 0.8);
   }
 
+  // Another player's shot (online): just a muzzle flash at their gun + tracers. No comic
+  // words, action lines, smoke or shells — those are only on the shooter's own screen.
+  remoteShot(e, gunPos) {
+    this.addStar(gunPos, 0.28, 0.06, 0xfff3a0);
+    for (const end of e.ends ?? []) this.addTracer(gunPos, end);
+  }
+
   // Everything that pops out of the gun when it fires (drawn in the viewmodel scene).
   muzzleFx(w) {
     const f = w.fx ?? {};
@@ -854,9 +863,9 @@ export class FX {
       v.g.children[1].scale.setScalar(1 + v.burst * 0.3);
     }
 
-    // Projectiles
+    // Projectiles (yours, plus other players' when online)
     const alive = new Set();
-    for (const pr of combat.projectiles) {
+    for (const pr of this.extraProjectiles ? combat.projectiles.concat(this.extraProjectiles) : combat.projectiles) {
       alive.add(pr);
       let mesh = this.projMeshes.get(pr);
       if (!mesh) {

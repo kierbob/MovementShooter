@@ -26,8 +26,9 @@ need an internet connection the first time.)
 
 Join links: `…/index.html?server=your-server-address` opens straight into Multiplayer.
 
-Current state: you can see each other moving (server-authoritative movement). Shooting each other,
-prediction/smoothing under lag, and online hosting are the next steps.
+Current state: free-for-all with real combat. The server runs the same movement + weapon code
+as the game (authoritative), with lag-compensated hits, client prediction + reconciliation, health,
+deaths, respawns and a kill feed. Next: match flow (scoreboard, score limit) and online hosting.
 
 ## Modes
 

@@ -82,8 +82,8 @@ body[data-guns="off"] .ability { display: none; }
 
 /* ---------- online ---------- */
 .online-status {
-  position: fixed; top: 14px; left: 50%; transform: translateX(-50%); display: none;
-  font-family: 'Bangers', 'Bebas Neue', sans-serif; font-size: 24px; letter-spacing: 2px; color: #7ee7c0;
+  position: fixed; top: 54px; left: 50%; transform: translateX(-50%); display: none;
+  font-family: 'Bangers', 'Bebas Neue', sans-serif; font-size: 18px; letter-spacing: 2px; color: #7ee7c0;
   -webkit-text-stroke: 1.5px #15151f; paint-order: stroke fill; text-shadow: 2px 2px 0 #15151f;
 }
 body[data-mode="online"] .online-status { display: block; }
@@ -92,7 +92,10 @@ body[data-mode="online"] .online-status { display: block; }
 .health, .arena-score, .killfeed { display: none; }
 body[data-mode="arena"] .health,
 body[data-mode="arena"] .arena-score,
-body[data-mode="arena"] .killfeed { display: block; }
+body[data-mode="arena"] .killfeed,
+body[data-mode="online"] .health,
+body[data-mode="online"] .arena-score,
+body[data-mode="online"] .killfeed { display: block; }
 
 .health { position: fixed; left: 28px; bottom: 24px; width: 260px; }
 .hp-num { font-size: 56px; line-height: 1; text-shadow: 0 3px 0 rgba(0,0,0,0.45); }

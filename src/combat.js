@@ -257,6 +257,7 @@ export class Combat {
 
   damageTarget(t, dmg, zone, point) {
     if (t.dead) return;
+    if (t.body?.invuln > 0) return; // spawn protection
     // Other online players: shots stop on them, but damage will be decided by the server (step 3).
     if (t.kind === 'remote') { this.fx.push({ type: 'impact', pos: point, normal: { x: 0, y: 1, z: 0 } }); return; }
     t.hp -= dmg;
@@ -469,7 +470,7 @@ export class Combat {
 
   updateTargets(p, dt) {
     for (const t of this.targets) {
-      if (t.kind === 'bot') continue; // bots move, aim and respawn themselves (bots.js)
+      if (t.kind !== 'dummy') continue; // bots / players move, aim and respawn themselves
       if (t.dead) {
         t.respawnT -= dt;
         if (t.respawnT <= 0) { t.dead = false; t.hp = t.maxHp; }
